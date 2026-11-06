@@ -2,6 +2,7 @@ import { requireAdmin } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { assertSameOrigin, json, readJson, route } from '@/lib/http';
 import { deadlineFromInput } from '@/lib/members';
+import { ensureSettings } from '@/lib/settings';
 import { settingsPatch } from '@/lib/validation';
 
 export const runtime = 'nodejs';
@@ -16,6 +17,7 @@ export const PATCH = route(async (req: Request) => {
     ...(accountNumber !== undefined ? { accountNumber: accountNumber.replace(/[\s-]/g, '') } : {}),
     ...(deadline !== undefined ? { deadline: deadline ? deadlineFromInput(deadline) : null } : {}),
   };
-  await db.setting.upsert({ where: { id: 1 }, create: { id: 1, ...data }, update: data });
+  await ensureSettings();
+  await db.setting.update({ where: { id: 1 }, data });
   return json({ ok: true });
 });

@@ -1,6 +1,7 @@
 import { cache } from 'react';
 import type { Setting } from '@prisma/client';
 import { db } from './db';
+import { findOrCreateSettings } from './settings-bootstrap';
 
 const fallbackSettings: Setting & { unavailable?: true } = {
   id: 1,
@@ -19,17 +20,28 @@ const fallbackSettings: Setting & { unavailable?: true } = {
 /** Baca (atau buat) baris pengaturan tunggal. Tanpa cache: untuk route handler & auth. */
 export const loadSettings = async (): Promise<Setting & { unavailable?: true }> => {
   try {
-    return await db.setting.upsert({ where: { id: 1 }, update: {}, create: { id: 1 } });
+    return await findOrCreateSettings({
+      findUnique: () => db.setting.findUnique({ where: { id: 1 } }),
+      create: () => db.setting.create({ data: { id: 1 } }),
+    });
   } catch (error) {
     const cause = error as { name?: string; code?: string };
     // Hindari mencatat message/error mentah: driver dapat menyertakan URL koneksi.
-    console.error('[settings] Database settings unavailable', {
-      name: cause.name ?? 'UnknownError',
-      code: cause.code ?? 'UNKNOWN',
-    });
+    if (cause.code !== 'P2002') {
+      console.error('[settings] Database settings unavailable', {
+        name: cause.name ?? 'UnknownError',
+        code: cause.code ?? 'UNKNOWN',
+      });
+    }
     return { ...fallbackSettings, unavailable: true };
   }
 };
+
+/** Ensures the singleton exists and propagates database errors to write endpoints. */
+export const ensureSettings = () => findOrCreateSettings({
+  findUnique: () => db.setting.findUnique({ where: { id: 1 } }),
+  create: () => db.setting.create({ data: { id: 1 } }),
+});
 
 /** Versi ber-cache per request untuk Server Components. */
 export const getSettings = cache(loadSettings);

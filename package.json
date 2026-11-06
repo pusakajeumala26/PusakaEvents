@@ -11,6 +11,7 @@
     "build": "prisma generate && prisma migrate deploy && next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
+    "test:settings-bootstrap": "node --experimental-strip-types --test scripts/settings-bootstrap.test.mjs",
     "postinstall": "prisma generate",
     "db:migrate": "prisma migrate deploy",
     "db:push": "prisma db push",
