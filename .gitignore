@@ -1,0 +1,17 @@
+node_modules
+.next
+out
+.env
+.env.local
+.env.*.local
+.vercel
+*.tsbuildinfo
+next-env.d.ts
+npm-debug.log*
+.DS_Store
+.vscode/
+.idea/
+Thumbs.db
+*.log
+coverage/
+.neon
