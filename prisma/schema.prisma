@@ -1,0 +1,87 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Gender {
+  L
+  P
+}
+
+enum PayStatus {
+  BELUM
+  MENUNGGU
+  TERVERIFIKASI
+  DITOLAK
+}
+
+enum EventType {
+  DAFTAR
+  IMPOR
+  UPLOAD
+  KIRIM_ULANG
+  DISETUJUI
+  DITOLAK
+}
+
+model Member {
+  id           String        @id @default(uuid())
+  name         String
+  /// Kode negara, mis. "+62"
+  countryCode  String
+  /// Hanya digit, tanpa nol di depan dan tanpa kode negara
+  phone        String
+  /// Subjek / deskripsi singkat dari anggota
+  subject      String        @default("")
+  gender       Gender
+  /// Null untuk anggota hasil impor admin sampai ia membuat password sendiri
+  passwordHash String?
+  status       PayStatus     @default(BELUM)
+  /// Alasan penolakan terakhir (hanya relevan saat status DITOLAK)
+  rejectReason String?
+  /// Key objek struk di Neon Object Storage, mis. "struk/<id>/1730000000000.webp"
+  receiptKey   String?
+  receiptAt    DateTime?
+  reviewedAt   DateTime?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  events       MemberEvent[]
+
+  @@unique([countryCode, phone])
+  @@index([createdAt])
+  @@index([status])
+}
+
+model MemberEvent {
+  id        String    @id @default(uuid())
+  memberId  String
+  member    Member    @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  type      EventType
+  note      String?
+  createdAt DateTime  @default(now())
+
+  @@index([memberId, createdAt])
+}
+
+/// Baris tunggal (id = 1)
+model Setting {
+  id                Int       @id @default(1)
+  letingName        String    @default("Pusaka Jeumala")
+  /// Nominal kas per anggota (Rupiah), sekali bayar
+  amount            Int       @default(10000)
+  /// Jumlah anggota yang ditargetkan
+  target            Int       @default(36)
+  deadline          DateTime?
+  registrationOpen  Boolean   @default(true)
+  bankName          String    @default("BSI")
+  accountNumber     String    @default("7366090325")
+  accountName       String    @default("Raisya Zumara")
+  adminPasswordHash String?
+  /// Dinaikkan setiap password admin diganti, supaya sesi lama tidak berlaku
+  adminPwVersion    Int       @default(0)
+}
