@@ -11,6 +11,7 @@ import { DatePicker } from './DatePicker';
 import { Ic } from './Ic';
 import { ImportModal } from './ImportModal';
 import { useToast } from './ToastProvider';
+import { PeriodManager } from './PeriodManager';
 
 export function SettingsView({ initial }: { initial: SV }) {
   const router = useRouter();
@@ -105,9 +106,10 @@ export function SettingsView({ initial }: { initial: SV }) {
 
   return (
     <>
-      <PageHeader title="Pengaturan & ekspor" sub="Kas, pendaftaran, data anggota, dan keamanan" mobileSub="Kas, data, keamanan" admin />
+      <PageHeader title="Pengaturan" sub="Kas, pendaftaran, data anggota, periode, dan keamanan" mobileSub="Kas, data, periode, keamanan" admin />
       <div className="content">
         <div className="sgrid">
+          <div className="setting-left">
           <form className="card" onSubmit={saveKas} noValidate>
             <h2>Kas &amp; rekening tujuan</h2>
             <div className="row2" style={{ gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)' }}>
@@ -121,6 +123,8 @@ export function SettingsView({ initial }: { initial: SV }) {
             </div>
             <button type="submit" className="btn pri" disabled={busy}>{busy ? 'Menyimpan...' : 'Simpan perubahan'}</button>
           </form>
+          <PeriodManager />
+          </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <section className="card"><h2>Pendaftaran</h2>

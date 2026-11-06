@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { api, copyText, postJson } from '@/lib/api-client';
+import { api, postJson } from '@/lib/api-client';
 import { COUNTRY_OPTIONS, PASSWORD_MIN, SUBJECT_MAX } from '@/lib/constants';
 import { rupiah, titleCase } from '@/lib/format';
 import type { PayInfo } from '@/lib/types';
@@ -11,6 +11,7 @@ import { Ic } from './Ic';
 import { ReceiptField } from './ReceiptField';
 import { Select } from './Select';
 import { useToast } from './ToastProvider';
+import { CopyButton } from './CopyButton';
 
 const COUNTRY_OPTS = COUNTRY_OPTIONS.map((c) => ({ value: c.code, label: c.label }));
 const GENDER_OPTS = [{ value: 'L', label: 'Laki-laki' }, { value: 'P', label: 'Perempuan' }];
@@ -35,23 +36,12 @@ export function Dialog({ title, titleId, onClose, wide, children, footer }: Dlg)
 }
 
 export function PayBox({ pay }: { pay: PayInfo }) {
-  const toast = useToast();
   return (
     <div className="pay">
-      <b>Transfer {rupiah(pay.amount)} ke</b>
-      <span className="mono">{pay.bankName}</span>
-      <span style={{ display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'space-between' }}>
-        <span className="mono num" style={{ fontSize: 18 }}>{pay.accountNumber}</span>
-        <button
-          type="button"
-          className="btn sm"
-          aria-label={`Salin nomor rekening ${pay.accountNumber}`}
-          onClick={async () => toast((await copyText(pay.accountNumber)) ? 'Nomor rekening disalin.' : 'Gagal menyalin. Salin manual.', 'ok')}
-        >
-          <Ic n="i-copy" />Salin
-        </button>
-      </span>
-      <span>a.n. <span className="mono">{pay.accountName}</span></span>
+      <div className="pay-row"><div className="pay-field"><span className="pay-label">Bank</span><b className="pay-bank">{pay.bankName}</b></div><div className="pay-field"><span className="pay-label">Nominal transfer</span><b>{rupiah(pay.amount)}</b></div></div>
+      <div className="pay-field"><span className="pay-label">Nomor rekening</span><div className="pay-account"><strong className="mono num">{pay.accountNumber}</strong><CopyButton value={pay.accountNumber} /></div></div>
+      <div className="pay-field"><span className="pay-label">Atas nama</span><strong className="pay-name">{pay.accountName}</strong></div>
+      <p className="hint">Transfer lalu upload struknya.</p>
     </div>
   );
 }

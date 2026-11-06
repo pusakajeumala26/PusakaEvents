@@ -8,6 +8,7 @@ import { useDialog } from '@/lib/use-dialog';
 import { Ic } from './Ic';
 import { InstallButton } from './InstallButton';
 import { useToast } from './ToastProvider';
+import { AdminSessionGuard } from './AdminSessionGuard';
 
 const MenuCtx = createContext<() => void>(() => {});
 
@@ -30,7 +31,7 @@ export function AppShell({
     { href: '/', label: 'Beranda', icon: 'i-home' },
     { href: '/verifikasi', label: 'Verifikasi Struk', icon: 'i-shield', admin: true, badge: admin ? pending : 0 },
     { href: '/rekap', label: 'Rekap Kas', icon: 'i-wallet', admin: true },
-    { href: '/pengaturan', label: 'Pengaturan & Ekspor', icon: 'i-sliders', admin: true },
+    { href: '/pengaturan', label: 'Pengaturan', icon: 'i-sliders', admin: true },
   ];
 
   return (
@@ -45,6 +46,7 @@ export function AppShell({
           <div className="main">{children}</div>
         </div>
         {menu && <Drawer items={items} admin={admin} path={path} letingName={letingName} onClose={() => setMenu(false)} />}
+        {admin && <AdminSessionGuard />}
       </div>
     </MenuCtx.Provider>
   );
@@ -94,6 +96,11 @@ function Foot({ admin }: { admin: boolean }) {
   const logout = async () => {
     try {
       await api('/api/admin/logout', { method: 'POST' });
+      if ('BroadcastChannel' in window) {
+        const channel = new BroadcastChannel('pusakaevent-admin-session');
+        channel.postMessage({ type: 'logout' });
+        channel.close();
+      }
       router.push('/');
       router.refresh();
     } catch (e) {

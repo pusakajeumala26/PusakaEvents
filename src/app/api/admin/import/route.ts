@@ -3,6 +3,7 @@ import { requireAdmin } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { assertSameOrigin, HttpError, json, readJson, route } from '@/lib/http';
 import { importRow } from '@/lib/validation';
+import { lockPeriodMutations } from '@/lib/period-lock';
 
 export const runtime = 'nodejs';
 export const maxDuration = 30;
@@ -19,6 +20,8 @@ type Item = { row: number; name: string; state: 'valid' | 'duplicate' | 'fix'; m
 export const POST = route(async (req: Request) => {
   assertSameOrigin(req);
   await requireAdmin();
+  const activePeriod = await db.setting.findUnique({ where: { id: 1 }, select: { periodStartedAt: true } });
+  if (!activePeriod) throw new HttpError(503, 'Pengaturan periode belum tersedia.');
   const body = await readJson<{ rows?: unknown; commit?: unknown }>(req);
   if (!Array.isArray(body.rows) || body.rows.length === 0) throw new HttpError(422, 'File tidak berisi baris data.');
   if (body.rows.length > MAX_ROWS) throw new HttpError(422, `Maksimal ${MAX_ROWS} baris per impor.`);
@@ -54,10 +57,15 @@ export const POST = route(async (req: Request) => {
   };
 
   if (body.commit === true && toCreate.length) {
-    await db.$transaction([
-      db.member.createMany({ data: toCreate.map((m) => ({ ...m, status: 'BELUM' as const })) }),
-      db.memberEvent.createMany({ data: toCreate.map((m) => ({ memberId: m.id, type: 'IMPOR' as const, note: 'Ditambahkan admin lewat impor' })) }),
-    ]);
+    await db.$transaction(async (tx) => {
+      await lockPeriodMutations(tx);
+      const currentPeriod = await tx.setting.findUnique({ where: { id: 1 }, select: { periodStartedAt: true } });
+      if (!currentPeriod || currentPeriod.periodStartedAt.getTime() !== activePeriod.periodStartedAt.getTime()) {
+        throw new HttpError(409, 'Periode berubah saat impor diproses. Muat ulang halaman lalu impor kembali.');
+      }
+      await tx.member.createMany({ data: toCreate.map((m) => ({ ...m, status: 'BELUM' as const })) });
+      await tx.memberEvent.createMany({ data: toCreate.map((m) => ({ memberId: m.id, type: 'IMPOR' as const, note: 'Ditambahkan admin lewat impor' })) });
+    });
   }
   return json({ ...summary, imported: body.commit === true ? toCreate.length : 0, items: items.slice(0, 200) });
 });

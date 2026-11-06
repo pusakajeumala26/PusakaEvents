@@ -3,6 +3,7 @@ import { db } from '@/lib/db';
 import { assertSameOrigin, HttpError, json, readJson, route } from '@/lib/http';
 import { toView } from '@/lib/members';
 import { reviewBody } from '@/lib/validation';
+import { lockPeriodMutations } from '@/lib/period-lock';
 
 export const runtime = 'nodejs';
 
@@ -15,14 +16,14 @@ export const POST = route<Ctx>(async (req, ctx) => {
   const { id } = await ctx.params;
   const body = reviewBody.parse(await readJson(req));
 
-  const m = await db.member.findUnique({ where: { id } });
-  if (!m) throw new HttpError(404, 'Anggota tidak ditemukan.');
-  if (!m.receiptKey) throw new HttpError(409, 'Anggota ini belum mengunggah struk.');
-
-  const now = new Date();
-  const updated =
-    body.action === 'approve'
-      ? await db.member.update({
+  const updated = await db.$transaction(async (tx) => {
+    await lockPeriodMutations(tx);
+    const m = await tx.member.findUnique({ where: { id } });
+    if (!m) throw new HttpError(404, 'Anggota tidak ditemukan.');
+    if (!m.receiptKey) throw new HttpError(409, 'Anggota ini belum mengunggah struk.');
+    const now = new Date();
+    return body.action === 'approve'
+      ? tx.member.update({
           where: { id },
           data: {
             status: 'TERVERIFIKASI',
@@ -31,7 +32,7 @@ export const POST = route<Ctx>(async (req, ctx) => {
             events: { create: [{ type: 'DISETUJUI', note: 'Disetujui admin' }] },
           },
         })
-      : await db.member.update({
+      : tx.member.update({
           where: { id },
           data: {
             status: 'DITOLAK',
@@ -40,5 +41,6 @@ export const POST = route<Ctx>(async (req, ctx) => {
             events: { create: [{ type: 'DITOLAK', note: body.reason }] },
           },
         });
+  });
   return json({ member: toView(updated, true) });
 });

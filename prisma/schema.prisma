@@ -29,6 +29,11 @@ enum EventType {
   DITOLAK
 }
 
+enum CleanupStatus {
+  OK
+  PARTIAL
+}
+
 model Member {
   id           String        @id @default(uuid())
   name         String
@@ -84,4 +89,25 @@ model Setting {
   adminPasswordHash String?
   /// Dinaikkan setiap password admin diganti, supaya sesi lama tidak berlaku
   adminPwVersion    Int       @default(0)
+  periodName        String    @default("Periode 1")
+  periodStartedAt   DateTime  @default(now())
+}
+
+model Period {
+  id               String        @id @default(uuid())
+  name             String
+  amount           Int
+  targetCount      Int
+  startedAt        DateTime
+  closedAt         DateTime      @default(now())
+  totalMembers     Int
+  verifiedCount    Int
+  pendingCount     Int
+  rejectedCount    Int
+  unpaidCount      Int
+  verifiedTotal    Int
+  receiptCount     Int
+  cleanupStatus    CleanupStatus @default(OK)
+
+  @@index([closedAt])
 }

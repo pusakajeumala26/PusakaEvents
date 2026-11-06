@@ -4,6 +4,7 @@ export class HttpError extends Error {
   constructor(
     public status: number,
     message: string,
+    public code?: string,
   ) {
     super(message);
   }
@@ -17,9 +18,10 @@ export function route<C = unknown>(fn: (req: Request, ctx: C) => Promise<Respons
     try {
       return await fn(req, ctx);
     } catch (e) {
-      if (e instanceof HttpError) return json({ error: e.message }, e.status);
+      if (e instanceof HttpError) return json({ error: e.message, ...(e.code ? { code: e.code } : {}) }, e.status);
       if (e instanceof ZodError) return json({ error: e.issues[0]?.message ?? 'Data tidak valid.' }, 422);
-      console.error('[api]', e);
+      const cause = e as { name?: string; code?: string };
+      console.error('[api] request failed', { name: cause.name ?? 'UnknownError', code: cause.code ?? 'UNKNOWN' });
       return json({ error: 'Terjadi kesalahan di server. Coba lagi sebentar.' }, 500);
     }
   };

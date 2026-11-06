@@ -7,6 +7,7 @@ import { isUniqueViolation, parseMemberFields } from '@/lib/member-input';
 import { loadSettings } from '@/lib/settings';
 import { deleteObject, putReceipt } from '@/lib/storage';
 import { memberPassword } from '@/lib/validation';
+import { lockPeriodMutations } from '@/lib/period-lock';
 
 export const runtime = 'nodejs';
 export const maxDuration = 30;
@@ -36,16 +37,21 @@ export const POST = route(async (req: Request) => {
 
   try {
     const now = new Date();
-    await db.member.create({
-      data: {
-        id,
-        ...fields,
-        passwordHash: await hashPassword(password),
-        status: 'MENUNGGU',
-        receiptKey: key,
-        receiptAt: now,
-        events: { create: [{ type: 'DAFTAR', note: 'Mendaftar & upload struk' }] },
-      },
+    await db.$transaction(async (tx) => {
+      await lockPeriodMutations(tx);
+      const liveSettings = await tx.setting.findUnique({ where: { id: 1 }, select: { registrationOpen: true } });
+      if (!liveSettings?.registrationOpen) throw new HttpError(403, 'Pendaftaran sedang ditutup oleh admin.');
+      await tx.member.create({
+        data: {
+          id,
+          ...fields,
+          passwordHash: await hashPassword(password),
+          status: 'MENUNGGU',
+          receiptKey: key,
+          receiptAt: now,
+          events: { create: [{ type: 'DAFTAR', note: 'Mendaftar & upload struk' }] },
+        },
+      });
     });
   } catch (e) {
     await deleteObject(key);

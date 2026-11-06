@@ -57,6 +57,24 @@ export const settingsPatch = z
   })
   .partial();
 
+export const periodCloseBody = z.object({
+  confirmName: z.string().trim().min(1).max(80),
+  confirmStartedAt: z.string().datetime().optional(),
+  password: adminPassword,
+  archivedReceiptCount: z.number().int().min(0).max(100_000),
+  archivedMemberCount: z.number().int().min(0).max(100_000).optional(),
+  newPeriod: z.object({
+    name: z.string().trim().min(2).max(80),
+    amount: z.number().int().min(1000).max(10_000_000),
+    targetCount: z.number().int().min(1).max(5000),
+    deadline: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine((value) => {
+      const [year, month, day] = value.split('-').map(Number);
+      const date = new Date(Date.UTC(year, month - 1, day));
+      return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+    }, 'Tanggal tenggat tidak valid.').nullable(),
+  }),
+});
+
 export const reviewBody = z.discriminatedUnion('action', [
   z.object({ action: z.literal('approve') }),
   z.object({

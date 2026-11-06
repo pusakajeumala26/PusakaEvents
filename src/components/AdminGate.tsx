@@ -7,7 +7,7 @@ import { Ic } from './Ic';
 import { PageHeader } from './AppShell';
 
 /** Gerbang password untuk halaman admin. */
-export function AdminGate({ title }: { title: string }) {
+export function AdminGate({ title, message }: { title: string; message?: string }) {
   const router = useRouter();
   const [pw, setPw] = useState('');
   const [show, setShow] = useState(false);
@@ -35,6 +35,7 @@ export function AdminGate({ title }: { title: string }) {
         <form className="gcard" onSubmit={submit} noValidate>
           <span className="ico-b"><Ic n="i-lock" size={28} /></span>
           <h2>Halaman admin</h2>
+          {message && <div className="note neu" role="status"><Ic n="i-alert" /><div>{message}</div></div>}
           <p className="sub">Masukkan password admin untuk membuka {title.toLowerCase()}.</p>
           <div className="f" style={{ width: '100%', textAlign: 'left' }}>
             <label className="lbl" htmlFor="apw">Password admin</label>

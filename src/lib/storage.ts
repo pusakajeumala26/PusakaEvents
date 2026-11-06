@@ -1,12 +1,15 @@
 import {
   CreateBucketCommand,
+  DeleteObjectsCommand,
   DeleteObjectCommand,
   GetObjectCommand,
   HeadBucketCommand,
   PutObjectCommand,
+  ListObjectsV2Command,
   S3Client,
 } from '@aws-sdk/client-s3';
 import { requireEnv } from './env';
+import { deleteBatchesWithFallback } from './storage-cleanup';
 
 /**
  * Neon Object Storage (S3-compatible, path-style, SigV4).
@@ -83,4 +86,33 @@ export async function getReceipt(key: string): Promise<{ body: Uint8Array; conte
     if (name === 'NoSuchKey' || name === 'NotFound') return null;
     throw e;
   }
+}
+
+export async function listReceiptObjects() {
+  const objects: { key: string; size: number }[] = [];
+  let token: string | undefined;
+  do {
+    const page = await s3().send(new ListObjectsV2Command({ Bucket: BUCKET, Prefix: 'struk/', ContinuationToken: token }));
+    for (const item of page.Contents ?? []) if (item.Key) objects.push({ key: item.Key, size: item.Size ?? 0 });
+    token = page.IsTruncated ? page.NextContinuationToken : undefined;
+  } while (token);
+  return objects;
+}
+
+export async function deleteReceiptPrefix() {
+  const objects = await listReceiptObjects();
+  const result = await deleteBatchesWithFallback(
+    objects,
+    async (batch) => {
+      const output = await s3().send(new DeleteObjectsCommand({
+        Bucket: BUCKET,
+        Delete: { Objects: batch.map(({ key }) => ({ Key: key })), Quiet: true },
+      }));
+      const failedKeys = new Set((output.Errors ?? []).flatMap((error) => error.Key ? [error.Key] : []));
+      return { failedItems: batch.filter((item) => failedKeys.has(item.key)) };
+    },
+    async ({ key }) => { await s3().send(new DeleteObjectCommand({ Bucket: BUCKET, Key: key })); },
+  );
+  console.info('[storage] receipt cleanup completed', { listed: objects.length, deleted: result.deleted, failed: result.failed });
+  return { listed: objects.length, ...result };
 }

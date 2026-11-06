@@ -15,8 +15,10 @@ export async function api<T = Record<string, unknown>>(url: string, init: Reques
     /* body kosong / bukan JSON */
   }
   if (!res.ok) {
-    const msg = (data as { error?: string } | null)?.error;
-    throw new Error(msg || (res.status === 413 ? 'File terlalu besar.' : 'Terjadi kesalahan. Coba lagi.'));
+    const body = data as { error?: string; code?: string } | null;
+    const failure = new Error(body?.error || (res.status === 413 ? 'File terlalu besar.' : 'Terjadi kesalahan. Coba lagi.')) as Error & { code?: string };
+    failure.code = body?.code;
+    throw failure;
   }
   return data as T;
 }
@@ -35,10 +37,10 @@ export async function copyText(text: string): Promise<boolean> {
       ta.style.position = 'fixed';
       ta.style.opacity = '0';
       document.body.appendChild(ta);
-      ta.select();
-      const ok = document.execCommand('copy');
-      ta.remove();
-      return ok;
+      try {
+        ta.select();
+        return document.execCommand('copy');
+      } finally { ta.remove(); }
     } catch {
       return false;
     }

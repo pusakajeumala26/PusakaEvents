@@ -5,9 +5,9 @@ import { isAdmin } from '@/lib/auth';
 import { toSettingsView } from '@/lib/members';
 import { getSettings } from '@/lib/settings';
 
-export const metadata: Metadata = { title: 'Pengaturan & Ekspor' };
+export const metadata: Metadata = { title: 'Pengaturan' };
 
 export default async function PengaturanPage() {
-  if (!(await isAdmin())) return <AdminGate title="Pengaturan & ekspor" />;
+  if (!(await isAdmin())) return <AdminGate title="Pengaturan" />;
   return <SettingsView initial={toSettingsView(await getSettings())} />;
 }

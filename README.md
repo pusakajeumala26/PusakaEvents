@@ -18,6 +18,7 @@
 - Admin memeriksa struk: **Setujui** (Terverifikasi) atau **Tolak** dengan alasan wajib (Ditolak) dan tautan WhatsApp siap kirim (`wa.me`, bukan otomatis).
 - Anggota yang ditolak membuka datanya dengan nomor HP + password, lalu mengirim ulang struk (kembali ke Menunggu).
 - Rekap kas, ekspor CSV/JSON, rekening tujuan (ada tombol salin), kontak pengurus.
+- Admin dapat mengarsipkan dan menutup periode event. ZIP dibuat di browser sebelum status anggota direset; struk dan histori event periode berjalan dibersihkan dari storage/database.
 - PWA: tombol Instal di sidebar untuk semua orang (panduan khusus iPhone), halaman offline, splash, skeleton, dropdown/scrollbar kustom, date picker modal.
 - Status selalu tampil dengan label + ikon, tidak hanya warna.
 
@@ -84,6 +85,8 @@ npm install
 npx prisma migrate deploy
 ```
 
+Perintah tersebut menerapkan migrasi ke database pada `DIRECT_URL` lingkungan yang sedang digunakan. Jangan arahkan perintah lokal ke database production; deploy Vercel akan menjalankan `prisma migrate deploy` saat build.
+
 ### 5. Jalankan lokal
 
 ```bash
@@ -92,11 +95,26 @@ npm run dev
 
 ## Deploy ke Vercel
 
-1. Import repo di Vercel. Framework: Next.js. Build/Install command biarkan default (`npm run build` sudah menjalankan `prisma generate`).
+1. Import repo di Vercel. Framework: Next.js. Build/Install command biarkan default (`npm run build` menjalankan `prisma generate`, `prisma migrate deploy`, lalu `next build`).
 2. Isi **semua env** di atas (Production, Preview, Development).
-3. Deploy, lalu jalankan `npx prisma migrate deploy` sekali dari komputer lokal dengan `DIRECT_URL` produksi.
+3. Deploy. Vercel menerapkan migrasi yang belum berjalan sebelum membangun aplikasi.
 4. Buka situs, masuk admin lewat menu **Masuk admin**, dan ubah password di Pengaturan.
 5. Cek halaman Pengaturan: nominal, target, bank, rekening, atas nama (nilai awal: BSI 7366090325 a.n. Raisya Zumara).
+
+## Sesi admin
+
+Sesi admin berlaku 30 menit. Saat tersisa 30 detik, aplikasi menampilkan dialog untuk memperpanjang sesi 30 menit atau keluar. Perpanjangan dan logout disinkronkan antar-tab; server tetap memvalidasi JWT dan versi password pada setiap endpoint admin.
+
+## Menutup periode event
+
+1. Masuk ke **Pengaturan** setelah memastikan password admin sudah diganti dan tersimpan sebagai hash.
+2. Pada bagian **Tutup periode event**, periksa jumlah anggota, status, kas terverifikasi, jumlah struk, dan ukuran storage.
+3. Isi nama periode, nominal, target, serta tenggat opsional untuk periode berikutnya. Pendaftaran periode baru tetap ditutup sampai dibuka kembali dari pengaturan.
+4. Buat ZIP dan tunggu semua struk selesai diunduh. Periksa file ZIP dan simpan di tempat aman sebelum melanjutkan.
+5. Centang konfirmasi, ketik nama periode lama persis, lalu masukkan ulang password admin untuk menutup periode.
+6. Setelah transaksi tersimpan, aplikasi menghapus seluruh objek pada prefix `struk/`. Jika storage menolak sebagian operasi, riwayat menandai pembersihan tertunda dan menyediakan **Ulangi pembersihan**.
+
+Arsip berisi `rekap.csv`, `anggota.json`, `ringkasan.json`, dan file struk pada folder `struk/`. Arsip dibuat di browser, sehingga pastikan perangkat memiliki ruang dan koneksi yang cukup. Jangan tutup dialog selama progress unduh berjalan. Setiap unduhan struk yang gagal menghentikan pembuatan arsip dan penutupan periode.
 
 ## Catatan keamanan
 

@@ -10,7 +10,7 @@ import { loadSettings } from './settings';
 
 export const ADMIN_COOKIE = 'pe_admin';
 export const MEMBER_COOKIE = 'pe_member';
-const ADMIN_MAX_AGE_S = 60 * 60 * 12;
+const ADMIN_MAX_AGE_S = 60 * 30;
 const MEMBER_MAX_AGE_S = 60 * 60 * 24 * 14;
 
 const secretKey = () => new TextEncoder().encode(requireEnv('SESSION_SECRET'));
@@ -39,31 +39,56 @@ export async function verifyAdminPassword(password: string): Promise<boolean> {
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
-export async function createAdminSession() {
-  const { adminPwVersion } = await loadSettings();
+async function issueAdminSession(adminPwVersion: number) {
+  const now = Math.floor(Date.now() / 1000);
+  const expiresAt = (now + ADMIN_MAX_AGE_S) * 1000;
   const token = await new SignJWT({ role: 'admin', pv: adminPwVersion })
     .setProtectedHeader({ alg: 'HS256' })
-    .setIssuedAt()
+    .setIssuedAt(now)
     .setExpirationTime(`${ADMIN_MAX_AGE_S}s`)
     .sign(secretKey());
   (await cookies()).set(ADMIN_COOKIE, token, cookieOpts(ADMIN_MAX_AGE_S));
+  return { expiresAt, serverNow: Date.now() };
+}
+
+export async function createAdminSession() {
+  const { adminPwVersion } = await loadSettings();
+  return issueAdminSession(adminPwVersion);
 }
 
 export async function clearAdminSession() {
   (await cookies()).delete(ADMIN_COOKIE);
 }
 
-async function checkAdminCookie(): Promise<boolean> {
+async function validAdminPayload() {
   const token = (await cookies()).get(ADMIN_COOKIE)?.value;
-  if (!token) return false;
+  if (!token) return null;
   try {
     const { payload } = await jwtVerify(token, secretKey(), { algorithms: ['HS256'] });
-    if (payload.role !== 'admin') return false;
-    const { adminPwVersion } = await loadSettings();
-    return payload.pv === adminPwVersion;
+    if (payload.role !== 'admin' || typeof payload.pv !== 'number' || typeof payload.iat !== 'number' || typeof payload.exp !== 'number') return null;
+    if (payload.exp - payload.iat > ADMIN_MAX_AGE_S) return null;
+    const settings = await db.setting.findUnique({ where: { id: 1 }, select: { adminPwVersion: true } });
+    if (!settings || payload.pv !== settings.adminPwVersion) return null;
+    return payload;
   } catch {
-    return false;
+    return null;
   }
+}
+
+async function checkAdminCookie(): Promise<boolean> {
+  return (await validAdminPayload()) !== null;
+}
+
+export async function getAdminSessionStatus() {
+  const payload = await validAdminPayload();
+  if (!payload?.exp) return null;
+  return { expiresAt: payload.exp * 1000, serverNow: Date.now() };
+}
+
+export async function refreshAdminSession() {
+  const payload = await validAdminPayload();
+  if (!payload || typeof payload.pv !== 'number') throw new HttpError(401, 'Sesi admin berakhir. Masuk lagi sebagai admin.');
+  return issueAdminSession(payload.pv);
 }
 
 /** Untuk Server Components (satu pengecekan per request). */

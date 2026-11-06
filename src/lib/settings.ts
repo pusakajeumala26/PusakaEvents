@@ -15,6 +15,8 @@ const fallbackSettings: Setting & { unavailable?: true } = {
   accountName: 'Raisya Zumara',
   adminPasswordHash: null,
   adminPwVersion: 0,
+  periodName: 'Periode 1',
+  periodStartedAt: new Date(0),
 };
 
 /** Baca (atau buat) baris pengaturan tunggal. Tanpa cache: untuk route handler & auth. */
