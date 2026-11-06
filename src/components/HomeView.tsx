@@ -27,7 +27,7 @@ export function StatusChip({ status }: { status: PayStatus }) {
 }
 
 export function HomeView({
-  members, stats, pay, self, admin, registrationOpen, letingName, autoUpload,
+  members, stats, pay, self, admin, registrationOpen, letingName, autoUpload, dataUnavailable,
 }: {
   members: MemberView[];
   stats: Stats;
@@ -37,6 +37,7 @@ export function HomeView({
   registrationOpen: boolean;
   letingName: string;
   autoUpload: boolean;
+  dataUnavailable: boolean;
 }) {
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState('ALL');
@@ -65,6 +66,7 @@ export function HomeView({
         admin={admin}
       />
       <div className="content">
+        {dataUnavailable && <div className="empty" role="alert"><b>Database belum siap.</b><p>Data kas belum dapat dimuat. Pengaturan sementara ditampilkan. Pastikan migrasi database berhasil lalu muat ulang halaman.</p></div>}
         {self && <SelfCard self={self} onResubmit={() => setModal('resubmit')} />}
 
         <section className="stats" aria-label="Ringkasan">
