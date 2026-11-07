@@ -23,9 +23,25 @@ export function AppShell({
   children: ReactNode;
 }) {
   const path = usePathname();
-  const [menu, setMenu] = useState(false);
+  const [menuPhase, setMenuPhase] = useState<'closed' | 'opening' | 'open' | 'closing'>('closed');
 
-  useEffect(() => setMenu(false), [path]);
+  const openMenu = () => setMenuPhase('opening');
+  const closeMenu = () => setMenuPhase((phase) => phase === 'closed' ? phase : 'closing');
+
+  useEffect(() => {
+    if (menuPhase === 'opening') {
+      const frame = requestAnimationFrame(() => setMenuPhase('open'));
+      return () => cancelAnimationFrame(frame);
+    }
+    if (menuPhase === 'closing') {
+      const timer = window.setTimeout(() => setMenuPhase('closed'), 260);
+      return () => window.clearTimeout(timer);
+    }
+  }, [menuPhase]);
+
+  useEffect(() => {
+    setMenuPhase((phase) => phase === 'closed' ? phase : 'closing');
+  }, [path]);
 
   const items: NavItem[] = [
     { href: '/', label: 'Beranda', icon: 'i-home' },
@@ -35,7 +51,7 @@ export function AppShell({
   ];
 
   return (
-    <MenuCtx.Provider value={() => setMenu(true)}>
+    <MenuCtx.Provider value={openMenu}>
       <div className="dj">
         <div className="app">
           <aside className="side">
@@ -43,9 +59,18 @@ export function AppShell({
             <Nav items={items} admin={admin} path={path} />
             <Foot admin={admin} />
           </aside>
-          <div className="main">{children}</div>
+          <div className="main route-enter" key={path}>{children}</div>
         </div>
-        {menu && <Drawer items={items} admin={admin} path={path} letingName={letingName} onClose={() => setMenu(false)} />}
+        {menuPhase !== 'closed' && (
+          <Drawer
+            items={items}
+            admin={admin}
+            path={path}
+            letingName={letingName}
+            open={menuPhase === 'open'}
+            onClose={closeMenu}
+          />
+        )}
         {admin && <AdminSessionGuard />}
       </div>
     </MenuCtx.Provider>
@@ -123,17 +148,18 @@ function Foot({ admin }: { admin: boolean }) {
 }
 
 function Drawer({
-  items, admin, path, letingName, onClose,
+  items, admin, path, letingName, open, onClose,
 }: {
   items: NavItem[];
   admin: boolean;
   path: string;
   letingName: string;
+  open: boolean;
   onClose: () => void;
 }) {
   const ref = useDialog<HTMLElement>(onClose);
   return (
-    <div className="scrim l" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+    <div className={`scrim l${open ? ' is-open' : ''}`} onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <nav className="drawer" aria-label="Menu utama" ref={ref} tabIndex={-1}>
         <div className="brand">
           <img className="logo" src="/brand/logo.webp?v=3" alt="" width={44} height={44} />

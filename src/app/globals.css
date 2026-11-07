@@ -196,6 +196,15 @@ textarea:focus-visible {
   flex-direction: column
 }
 
+.main.route-enter {
+  animation: page-enter .24s cubic-bezier(.2, .75, .25, 1) both
+}
+
+@keyframes page-enter {
+  from { opacity: 0; transform: translateY(8px) }
+  to { opacity: 1; transform: translateY(0) }
+}
+
 .side {
   padding: 28px 20px;
   display: flex;
@@ -854,7 +863,13 @@ textarea.inp {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 32px
+  padding: 32px;
+  animation: scrim-enter .2s ease-out both
+}
+
+@keyframes scrim-enter {
+  from { opacity: 0 }
+  to { opacity: 1 }
 }
 
 .dlg {
@@ -866,7 +881,13 @@ textarea.inp {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  max-height: calc(100dvh - 64px)
+  max-height: calc(100dvh - 64px);
+  animation: dialog-enter .24s cubic-bezier(.2, .75, .25, 1) both
+}
+
+@keyframes dialog-enter {
+  from { opacity: 0; transform: translateY(12px) scale(.985) }
+  to { opacity: 1; transform: translateY(0) scale(1) }
 }
 
 .dlg.wd {
@@ -1563,7 +1584,9 @@ textarea.inp {
   padding: 24px 20px;
   display: flex;
   flex-direction: column;
-  gap: 24px
+  gap: 24px;
+  transform: translateX(-100%);
+  transition: transform .26s cubic-bezier(.22, .75, .25, 1)
 }
 
 .scrim.l {
@@ -1628,7 +1651,14 @@ textarea.inp {
   flex-direction: column;
   gap: 2px;
   max-height: 260px;
-  overflow: auto
+  overflow: auto;
+  transform-origin: top center;
+  animation: popup-enter .16s cubic-bezier(.2, .75, .25, 1) both
+}
+
+@keyframes popup-enter {
+  from { opacity: 0; transform: translateY(-4px) scale(.985) }
+  to { opacity: 1; transform: translateY(0) scale(1) }
 }
 
 .lb .op {
@@ -2057,7 +2087,22 @@ textarea.inp {
 }
 
 .scrim.l {
-  z-index: 70
+  z-index: 70;
+  opacity: 0;
+  animation: none;
+  transition: opacity .26s ease
+}
+
+.scrim.l.is-open {
+  opacity: 1
+}
+
+.scrim.l.is-open .drawer {
+  transform: translateX(0)
+}
+
+.scrim.l:not(.is-open) {
+  pointer-events: none
 }
 
 button {
@@ -2105,6 +2150,18 @@ button:disabled,
 }
 
 @media (prefers-reduced-motion:reduce) {
+  .main.route-enter,
+  .scrim,
+  .dlg,
+  .lb {
+    animation-duration: .01ms
+  }
+
+  .scrim.l,
+  .drawer {
+    transition-duration: .01ms
+  }
+
   .splash img {
     animation: none
   }
