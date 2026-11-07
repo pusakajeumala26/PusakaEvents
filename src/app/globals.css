@@ -2106,6 +2106,11 @@ textarea.inp {
     flex-direction: column-reverse
   }
 
+  .dlg footer .btn {
+    flex: 0 0 48px;
+    width: 100%
+  }
+
   .kv {
     grid-template-columns: 110px minmax(0, 1fr)
   }
