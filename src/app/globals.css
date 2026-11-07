@@ -609,6 +609,12 @@ textarea.inp {
   gap: 16px
 }
 
+@media (max-width:1099px) {
+  .stats {
+    grid-template-columns: minmax(0, 1fr)
+  }
+}
+
 .stat {
   border-radius: 28px;
   background: var(--soft);
