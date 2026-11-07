@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import type { CSSProperties } from 'react';
 import { Ic } from './Ic';
 
 export type Opt = { value: string; label: string };
@@ -30,6 +31,7 @@ export function Select({
   const uid = useId();
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
+  const [menuStyle, setMenuStyle] = useState<CSSProperties>();
   const root = useRef<HTMLDivElement>(null);
   const btn = useRef<HTMLButtonElement>(null);
   const list = useRef<HTMLDivElement>(null);
@@ -40,21 +42,57 @@ export function Select({
   );
   const current = options.find((o) => o.value === value);
 
+  const positionMenu = useCallback(() => {
+    const anchor = btn.current?.getBoundingClientRect();
+    if (!anchor) return;
+    const gutter = 12;
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    const width = Math.min(menuWidth ?? anchor.width, Math.max(80, viewportWidth - gutter * 2));
+    const left = Math.max(gutter, Math.min(anchor.left, viewportWidth - gutter - width));
+    const below = viewportHeight - anchor.bottom - gutter - 8;
+    const above = anchor.top - gutter - 8;
+    const placeAbove = below < 180 && above > below;
+    const maxHeight = Math.max(80, Math.min(260, placeAbove ? above : below));
+    setMenuStyle({
+      position: 'fixed',
+      left,
+      width,
+      maxHeight,
+      zIndex: 80,
+      ...(placeAbove
+        ? { top: 'auto', bottom: viewportHeight - anchor.top + 6 }
+        : { top: anchor.bottom + 6, bottom: 'auto' }),
+    });
+  }, [menuWidth]);
+
   useEffect(() => {
     if (!open) return;
     const onDown = (e: PointerEvent) => {
       if (!root.current?.contains(e.target as Node)) setOpen(false);
     };
     document.addEventListener('pointerdown', onDown);
+    window.addEventListener('resize', positionMenu);
+    window.addEventListener('scroll', positionMenu, true);
     const sel = list.current?.querySelector<HTMLElement>('[aria-selected=true]');
     (sel ?? list.current?.querySelector<HTMLElement>('[role=option]'))?.focus();
-    return () => document.removeEventListener('pointerdown', onDown);
-  }, [open]);
+    return () => {
+      document.removeEventListener('pointerdown', onDown);
+      window.removeEventListener('resize', positionMenu);
+      window.removeEventListener('scroll', positionMenu, true);
+    };
+  }, [open, positionMenu]);
 
   const close = (refocus = true) => {
     setOpen(false);
     setQ('');
+    setMenuStyle(undefined);
     if (refocus) btn.current?.focus();
+  };
+
+  const showMenu = () => {
+    positionMenu();
+    setOpen(true);
   };
 
   const onListKey = (e: React.KeyboardEvent) => {
@@ -88,11 +126,11 @@ export function Select({
         aria-controls={open ? `${uid}-lb` : undefined}
         aria-label={ariaLabel}
         aria-invalid={invalid || undefined}
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => open ? close(false) : showMenu()}
         onKeyDown={(e) => {
           if (!open && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
             e.preventDefault();
-            setOpen(true);
+            showMenu();
           }
         }}
       >
@@ -109,7 +147,7 @@ export function Select({
           role="listbox"
           aria-label={ariaLabel}
           onKeyDown={onListKey}
-          style={{ ...(menuWidth ? { width: menuWidth } : {}), ...(align === 'right' ? { left: 'auto', right: 0 } : {}) }}
+          style={menuStyle ?? { ...(menuWidth ? { width: menuWidth } : {}), ...(align === 'right' ? { left: 'auto', right: 0 } : {}) }}
         >
           {searchable && (
             <div className="srch">

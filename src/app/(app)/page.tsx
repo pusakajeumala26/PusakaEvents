@@ -18,7 +18,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
   let dataUnavailable = settings.unavailable === true;
   let self = null as Awaited<ReturnType<typeof getSelf>>;
   try {
-    [members, stats, self] = await Promise.all([listMembers(admin), getStats(settings), getSelf()]);
+    [members, stats, self] = await Promise.all([listMembers(admin, 5), getStats(settings), getSelf()]);
   } catch (error) {
     const cause = error as { name?: string; code?: string };
     console.error('[home] Database data unavailable', { name: cause.name ?? 'UnknownError', code: cause.code ?? 'UNKNOWN' });

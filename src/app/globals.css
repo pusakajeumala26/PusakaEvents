@@ -266,6 +266,20 @@ textarea:focus-visible {
   font-weight: 500
 }
 
+.nav-action {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer
+}
+
+.nav-action:hover {
+  background: var(--soft)
+}
+
 .nav.on {
   background: var(--ink);
   color: #fff
@@ -757,6 +771,25 @@ textarea.inp {
   gap: 12px;
   align-items: center;
   flex-wrap: wrap
+}
+
+.member-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 14px
+}
+
+.section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px
+}
+
+.section-head h2 {
+  font-size: 20px;
+  font-weight: 650;
+  letter-spacing: -.02em
 }
 
 .search {
@@ -1593,6 +1626,14 @@ textarea.inp {
   justify-content: flex-start;
   align-items: stretch;
   padding: 0
+}
+
+.contacts-scrim {
+  z-index: 90
+}
+
+.contacts-grid {
+  grid-template-columns: minmax(0, 1fr)
 }
 
 /* ---------- custom scrollbar (monochrome, thin) ---------- */

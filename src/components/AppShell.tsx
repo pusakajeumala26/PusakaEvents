@@ -9,10 +9,11 @@ import { Ic } from './Ic';
 import { InstallButton } from './InstallButton';
 import { useToast } from './ToastProvider';
 import { AdminSessionGuard } from './AdminSessionGuard';
+import { ContactsModal } from './ContactsModal';
 
 const MenuCtx = createContext<() => void>(() => {});
 
-type NavItem = { href: string; label: string; icon: string; admin?: boolean; badge?: number };
+type NavItem = { href: string; label: string; icon: string; admin?: boolean; badge?: number; action?: 'contacts' };
 
 export function AppShell({
   admin, pending, letingName, children,
@@ -24,9 +25,18 @@ export function AppShell({
 }) {
   const path = usePathname();
   const [menuPhase, setMenuPhase] = useState<'closed' | 'opening' | 'open' | 'closing'>('closed');
+  const [contactsOpen, setContactsOpen] = useState(false);
 
   const openMenu = () => setMenuPhase('opening');
   const closeMenu = () => setMenuPhase((phase) => phase === 'closed' ? phase : 'closing');
+  const showContacts = () => {
+    if (menuPhase !== 'closed') {
+      closeMenu();
+      window.setTimeout(() => setContactsOpen(true), 270);
+    } else {
+      setContactsOpen(true);
+    }
+  };
 
   useEffect(() => {
     if (menuPhase === 'opening') {
@@ -45,6 +55,8 @@ export function AppShell({
 
   const items: NavItem[] = [
     { href: '/', label: 'Beranda', icon: 'i-home' },
+    { href: '/anggota', label: 'Data anggota', icon: 'i-user' },
+    { href: '#contacts', label: 'Hubungi pengurus', icon: 'i-chat', action: 'contacts' },
     { href: '/verifikasi', label: 'Verifikasi Struk', icon: 'i-shield', admin: true, badge: admin ? pending : 0 },
     { href: '/rekap', label: 'Rekap Kas', icon: 'i-wallet', admin: true },
     { href: '/pengaturan', label: 'Pengaturan', icon: 'i-sliders', admin: true },
@@ -56,7 +68,7 @@ export function AppShell({
         <div className="app">
           <aside className="side">
             <Brand letingName={letingName} />
-            <Nav items={items} admin={admin} path={path} />
+            <Nav items={items} admin={admin} path={path} onContacts={showContacts} />
             <Foot admin={admin} />
           </aside>
           <div className="main route-enter" key={path}>{children}</div>
@@ -69,8 +81,10 @@ export function AppShell({
             letingName={letingName}
             open={menuPhase === 'open'}
             onClose={closeMenu}
+            onContacts={showContacts}
           />
         )}
+        {contactsOpen && <ContactsModal onClose={() => setContactsOpen(false)} />}
         {admin && <AdminSessionGuard />}
       </div>
     </MenuCtx.Provider>
@@ -89,16 +103,23 @@ function Brand({ letingName }: { letingName: string }) {
   );
 }
 
-function Nav({ items, admin, path }: { items: NavItem[]; admin: boolean; path: string }) {
+function Nav({ items, admin, path, onContacts }: { items: NavItem[]; admin: boolean; path: string; onContacts: () => void }) {
   const on = (href: string) => (href === '/' ? path === '/' : path.startsWith(href));
-  const link = (it: NavItem) => (
-    <Link key={it.href} className={`nav${on(it.href) ? ' on' : ''}`} href={it.href} aria-current={on(it.href) ? 'page' : undefined}>
+  const content = (it: NavItem) => (
+    <>
       <Ic n={it.icon} />
       {it.label}
       {!!it.badge && <span className="cnt" aria-label={`${it.badge} menunggu`}>{it.badge}</span>}
       {it.admin && !admin && (
         <span className="lk"><Ic n="i-lock" size={16} /><span className="sr"> (khusus admin)</span></span>
       )}
+    </>
+  );
+  const link = (it: NavItem) => it.action === 'contacts' ? (
+    <button key={it.href} type="button" className="nav nav-action" onClick={onContacts}>{content(it)}</button>
+  ) : (
+    <Link key={it.href} className={`nav${on(it.href) ? ' on' : ''}`} href={it.href} aria-current={on(it.href) ? 'page' : undefined}>
+      {content(it)}
     </Link>
   );
   return (
@@ -148,7 +169,7 @@ function Foot({ admin }: { admin: boolean }) {
 }
 
 function Drawer({
-  items, admin, path, letingName, open, onClose,
+  items, admin, path, letingName, open, onClose, onContacts,
 }: {
   items: NavItem[];
   admin: boolean;
@@ -156,6 +177,7 @@ function Drawer({
   letingName: string;
   open: boolean;
   onClose: () => void;
+  onContacts: () => void;
 }) {
   const ref = useDialog<HTMLElement>(onClose);
   return (
@@ -169,7 +191,7 @@ function Drawer({
           </div>
           <button type="button" className="ib ol" aria-label="Tutup menu" onClick={onClose}><Ic n="i-x" /></button>
         </div>
-        <Nav items={items} admin={admin} path={path} />
+        <Nav items={items} admin={admin} path={path} onContacts={onContacts} />
         <Foot admin={admin} />
       </nav>
     </div>

@@ -2,24 +2,14 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useMemo, useState } from 'react';
-import { ADMIN_CONTACTS } from '@/lib/constants';
-import { formatDateTime, idWa, initials, rupiah } from '@/lib/format';
+import { useState } from 'react';
+import { formatDateTime, initials, rupiah } from '@/lib/format';
 import { postJson } from '@/lib/api-client';
 import { STATUS_META, type MemberView, type PayInfo, type PayStatus, type SelfView, type Stats } from '@/lib/types';
 import { PageHeader } from './AppShell';
 import { Ic } from './Ic';
 import { OpenDataModal, PayBox, ResubmitModal, UploadModal } from './MemberForms';
-import { Select } from './Select';
 import { useToast } from './ToastProvider';
-
-const FILTERS = [
-  { value: 'ALL', label: 'Semua status' },
-  { value: 'TERVERIFIKASI', label: 'Terverifikasi' },
-  { value: 'MENUNGGU', label: 'Menunggu' },
-  { value: 'DITOLAK', label: 'Ditolak' },
-  { value: 'BELUM', label: 'Belum input' },
-];
 
 export function StatusChip({ status }: { status: PayStatus }) {
   const m = STATUS_META[status];
@@ -39,14 +29,7 @@ export function HomeView({
   autoUpload: boolean;
   dataUnavailable: boolean;
 }) {
-  const [q, setQ] = useState('');
-  const [filter, setFilter] = useState('ALL');
   const [modal, setModal] = useState<null | 'upload' | 'open' | 'resubmit'>(autoUpload && registrationOpen && !self ? 'upload' : null);
-
-  const shown = useMemo(() => {
-    const t = q.trim().toLowerCase();
-    return members.filter((m) => (filter === 'ALL' || m.status === filter) && (!t || m.name.toLowerCase().includes(t)));
-  }, [members, q, filter]);
 
   const c = stats.counts;
   const seg = [
@@ -98,13 +81,25 @@ export function HomeView({
 
         <section className="card" aria-label="Rekening tujuan"><h2>Rekening tujuan kas</h2><PayBox pay={pay} /></section>
 
-        <div className="tools">
-          <div className="search">
-            <Ic n="i-search" />
-            <label className="lbl sr" htmlFor="q">Cari anggota</label>
-            <input className="inp" id="q" type="search" placeholder="Cari nama anggota" value={q} onChange={(e) => setQ(e.target.value)} />
+        <section className="member-preview" aria-label="Data anggota terbaru">
+          <div className="section-head">
+            <h2>Data anggota terbaru</h2>
+            <Link className="btn ghost sm" href="/anggota">Lihat semua <Ic n="i-chev" /></Link>
           </div>
-          <Select ariaLabel="Filter status" value={filter} options={FILTERS} onChange={setFilter} align="right" menuWidth={210} className="tools-sel" />
+          {members.length === 0 ? (
+            <section className="empty" aria-live="polite">
+              <Ic n="i-search" size={32} />
+              <h2>Belum ada anggota</h2>
+              <p className="sub">Belum ada yang mendaftar. Jadilah yang pertama upload struk.</p>
+            </section>
+          ) : (
+            <section className="list" aria-label="Lima anggota terbaru">
+              {members.slice(0, 5).map((m) => <MemberCard key={m.id} m={m} admin={admin} />)}
+            </section>
+          )}
+        </section>
+
+        <div className="tools">
           {!self && (
             <button type="button" className="btn pri" disabled={!registrationOpen} onClick={() => setModal('upload')}>
               <Ic n="i-upload" />Upload
@@ -116,37 +111,6 @@ export function HomeView({
         </div>
         {!registrationOpen && !self && <div className="note neu" role="status"><Ic n="i-alert" /><div>Pendaftaran sedang ditutup oleh admin.</div></div>}
 
-        {shown.length === 0 ? (
-          <section className="empty" aria-live="polite">
-            <Ic n="i-search" size={32} />
-            <h2>{members.length === 0 ? 'Belum ada anggota' : 'Anggota tidak ditemukan'}</h2>
-            <p className="sub">
-              {members.length === 0
-                ? 'Belum ada yang mendaftar. Jadilah yang pertama upload struk.'
-                : q ? `Tidak ada nama yang cocok dengan "${q}". Periksa ejaan atau ganti filter status.` : 'Tidak ada anggota dengan status ini.'}
-            </p>
-            {(q || filter !== 'ALL') && <button type="button" className="btn ghost" onClick={() => { setQ(''); setFilter('ALL'); }}>Hapus pencarian</button>}
-          </section>
-        ) : (
-          <section className="list" aria-label="Daftar anggota">
-            {shown.map((m) => <MemberCard key={m.id} m={m} admin={admin} />)}
-          </section>
-        )}
-
-        <section className="card" aria-label="Kontak pengurus">
-          <h2>Hubungi pengurus</h2>
-          <div className="cgrid">
-            {ADMIN_CONTACTS.map((p) => (
-              <div className="ct" key={p.phone}>
-                <span className="av">{initials(p.name)}</span>
-                <div className="t"><b>{p.name}</b><span>{p.title} · <span className="num">{p.phone}</span></span></div>
-                <a className="ib ol" href={`https://wa.me/${idWa(p.phone)}`} target="_blank" rel="noopener noreferrer" aria-label={`Chat WhatsApp ${p.name}, ${p.title}`}>
-                  <Ic n="i-chat" />
-                </a>
-              </div>
-            ))}
-          </div>
-        </section>
       </div>
 
       {modal === 'upload' && <UploadModal pay={pay} onClose={() => setModal(null)} />}
@@ -156,7 +120,7 @@ export function HomeView({
   );
 }
 
-function MemberCard({ m, admin }: { m: MemberView; admin: boolean }) {
+export function MemberCard({ m, admin }: { m: MemberView; admin: boolean }) {
   const body = (
     <>
       <span className="av">{initials(m.name)}</span>

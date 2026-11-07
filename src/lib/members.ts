@@ -45,8 +45,8 @@ export const toEventView = (e: MemberEvent): EventView => ({
   createdAt: e.createdAt.toISOString(),
 });
 
-export async function listMembers(admin: boolean): Promise<MemberView[]> {
-  const rows = await db.member.findMany({ orderBy: { createdAt: 'desc' } });
+export async function listMembers(admin: boolean, take?: number): Promise<MemberView[]> {
+  const rows = await db.member.findMany({ orderBy: { createdAt: 'desc' }, ...(take ? { take } : {}) });
   return rows.map((m) => toView(m, admin));
 }
 

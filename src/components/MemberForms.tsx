@@ -16,13 +16,13 @@ import { CopyButton } from './CopyButton';
 const COUNTRY_OPTS = COUNTRY_OPTIONS.map((c) => ({ value: c.code, label: c.label }));
 const GENDER_OPTS = [{ value: 'L', label: 'Laki-laki' }, { value: 'P', label: 'Perempuan' }];
 
-type Dlg = { title: string; titleId: string; onClose: () => void; wide?: boolean; children: React.ReactNode; footer: React.ReactNode };
+type Dlg = { title: string; titleId: string; onClose: () => void; wide?: boolean; scrimClassName?: string; children: React.ReactNode; footer: React.ReactNode };
 
 /** Kerangka dialog: modal di desktop, bottom sheet di mobile (lewat CSS). */
-export function Dialog({ title, titleId, onClose, wide, children, footer }: Dlg) {
+export function Dialog({ title, titleId, onClose, wide, scrimClassName = '', children, footer }: Dlg) {
   const ref = useDialog<HTMLDivElement>(onClose);
   return (
-    <div className="scrim" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+    <div className={`scrim ${scrimClassName}`.trim()} onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className={`dlg${wide ? ' wd' : ''}`} role="dialog" aria-modal="true" aria-labelledby={titleId} ref={ref} tabIndex={-1}>
         <header>
           <h2 id={titleId}>{title}</h2>
