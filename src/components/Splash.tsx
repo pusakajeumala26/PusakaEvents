@@ -27,7 +27,7 @@ export function Splash() {
   if (phase === 'gone') return null;
   return (
     <div className={phase === 'out' ? 'splash out' : 'splash'} role="status" aria-label="Memuat PusakaEvent">
-      <img src="/brand/logo.webp" alt="" width={140} height={151} />
+      <img src="/brand/logo.webp?v=3" alt="" width={140} height={140} />
       <b>PusakaEvent</b>
       <div className="ld" aria-hidden="true">
         <i />

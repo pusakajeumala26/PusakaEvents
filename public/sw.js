@@ -4,11 +4,11 @@
  * - Tidak pernah men-cache /api, halaman admin, atau foto (signed URL storage kedaluwarsa
  *   dan berisi data pribadi), supaya tidak ada data anggota tersisa di perangkat bersama.
  * Naikkan VERSION saat strategi cache berubah. */
-const VERSION = 'pe-v2';
+const VERSION = 'pe-v3';
 const SHELL_CACHE = `${VERSION}-shell`;
 const ASSET_CACHE = `${VERSION}-assets`;
 const OFFLINE_URL = '/offline';
-const PRECACHE = [OFFLINE_URL, '/icons/icon-32.png', '/icons/icon-192.png', '/icons/icon-512.png', '/icons/apple-touch-icon.png', '/brand/logo.webp'];
+const PRECACHE = [OFFLINE_URL, '/icons/favicon.ico?v=3', '/icons/icon-32.png?v=3', '/icons/icon-192.png?v=3', '/icons/icon-512.png?v=3', '/icons/apple-touch-icon.png?v=3', '/icons/maskable-512.png?v=3', '/brand/logo.webp?v=3'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(

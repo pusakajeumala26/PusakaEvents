@@ -5,7 +5,7 @@ export default function Loading() {
   return (
     <>
       <header className="top-m">
-        <img className="logo" src="/brand/logo.webp" alt="" width={44} height={47} />
+        <img className="logo" src="/brand/logo.webp?v=3" alt="" width={44} height={44} />
         <div className="tt"><h1>PusakaEvent</h1><div className="sub">Memuat data...</div></div>
       </header>
       <header className="top-d">

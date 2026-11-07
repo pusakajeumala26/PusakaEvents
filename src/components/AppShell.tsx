@@ -55,7 +55,7 @@ export function AppShell({
 function Brand({ letingName }: { letingName: string }) {
   return (
     <div className="brand">
-      <img className="logo" src="/brand/logo.webp" alt="" width={44} height={47} />
+      <img className="logo" src="/brand/logo.webp?v=3" alt="" width={44} height={44} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <b>PusakaEvent</b>
         <span className="s">Leting {letingName}</span>
@@ -136,7 +136,7 @@ function Drawer({
     <div className="scrim l" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <nav className="drawer" aria-label="Menu utama" ref={ref} tabIndex={-1}>
         <div className="brand">
-          <img className="logo" src="/brand/logo.webp" alt="" width={44} height={47} />
+          <img className="logo" src="/brand/logo.webp?v=3" alt="" width={44} height={44} />
           <div style={{ flex: 1, minWidth: 0 }}>
             <b>PusakaEvent</b>
             <span className="s">Leting {letingName}</span>
@@ -156,7 +156,7 @@ export function PageHeader({ title, sub, mobileSub, admin }: { title: string; su
   return (
     <>
       <header className="top-m">
-        <img className="logo" src="/brand/logo.webp" alt="" width={44} height={47} />
+        <img className="logo" src="/brand/logo.webp?v=3" alt="" width={44} height={44} />
         <div className="tt"><h1>{title}</h1><div className="sub">{mobileSub ?? sub}</div></div>
         <button type="button" className="ib" aria-label="Buka menu" onClick={open}><Ic n="i-menu" /></button>
       </header>
