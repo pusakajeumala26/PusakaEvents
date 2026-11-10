@@ -56,6 +56,7 @@ export function AppShell({
   const items: NavItem[] = [
     { href: '/', label: 'Beranda', icon: 'i-home' },
     { href: '/anggota', label: 'Data anggota', icon: 'i-user' },
+    { href: '/masukan', label: 'Kirim masukan', icon: 'i-chat' },
     { href: '#contacts', label: 'Hubungi pengurus', icon: 'i-chat', action: 'contacts' },
     { href: '/verifikasi', label: 'Verifikasi Struk', icon: 'i-shield', admin: true, badge: admin ? pending : 0 },
     { href: '/rekap', label: 'Rekap Kas', icon: 'i-wallet', admin: true },

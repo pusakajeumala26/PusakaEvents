@@ -779,6 +779,148 @@ textarea.inp {
   gap: 14px
 }
 
+.feedback-content {
+  width: 100%;
+  max-width: 920px;
+  margin: 0 auto;
+  align-self: stretch
+}
+
+.feedback-card {
+  width: 100%;
+  border: 1.5px solid var(--line);
+  border-radius: 28px;
+  padding: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px
+}
+
+.feedback-intro {
+  display: flex;
+  align-items: center;
+  gap: 14px
+}
+
+.feedback-intro h2 {
+  font-size: 22px;
+  letter-spacing: -.02em;
+  font-weight: 650
+}
+
+.feedback-form,
+.feedback-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 18px
+}
+
+.feedback-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr))
+}
+
+.feedback-fields .f:first-child {
+  grid-column: 1 / -1
+}
+
+.feedback-rating {
+  min-width: 0;
+  border: 0;
+  padding: 0;
+  margin: 0
+}
+
+.feedback-rating legend {
+  margin-bottom: 8px
+}
+
+.rating-options {
+  display: flex;
+  gap: 10px
+}
+
+.rating-choice {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  width: 64px;
+  height: 48px;
+  border: 1.5px solid #CFCFCF;
+  border-radius: 14px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: border-color .15s ease, background-color .15s ease
+}
+
+.rating-choice.selected {
+  border-color: var(--ink);
+  background: var(--soft)
+}
+
+.rating-choice:focus-within {
+  outline: 3px solid rgba(0, 0, 0, .25);
+  outline-offset: 2px
+}
+
+.rating-choice input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0
+}
+
+.rating-choice span {
+  font-size: 18px
+}
+
+.feedback-message {
+  min-height: 150px;
+  height: 150px;
+  resize: vertical
+}
+
+.feedback-message-meta {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px
+}
+
+.feedback-message-meta .hint:last-child {
+  flex: none
+}
+
+.feedback-consent {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  max-width: 720px;
+  line-height: 1.5;
+  cursor: pointer
+}
+
+.feedback-consent input {
+  margin-top: 4px;
+  accent-color: var(--ink);
+  flex: none
+}
+
+.feedback-submit {
+  align-self: flex-start;
+  min-width: 190px
+}
+
+.feedback-honeypot {
+  position: absolute;
+  left: -10000px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden
+}
+
 .section-head {
   display: flex;
   align-items: center;
@@ -2066,6 +2208,36 @@ textarea.inp {
 
   .stat .v small {
     font-size: 15px
+  }
+
+  .feedback-card {
+    padding: 20px;
+    border-radius: 24px
+  }
+
+  .feedback-fields {
+    grid-template-columns: minmax(0, 1fr)
+  }
+
+  .feedback-fields .f:first-child {
+    grid-column: auto
+  }
+
+  .rating-options {
+    gap: 8px
+  }
+
+  .rating-choice {
+    flex: 1;
+    min-width: 0
+  }
+
+  .feedback-message-meta {
+    flex-direction: column
+  }
+
+  .feedback-submit {
+    width: 100%
   }
 
   .list {
