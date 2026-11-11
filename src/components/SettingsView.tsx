@@ -12,8 +12,10 @@ import { Ic } from './Ic';
 import { ImportModal } from './ImportModal';
 import { useToast } from './ToastProvider';
 import { PeriodManager } from './PeriodManager';
+import { PortfolioConnectionCard } from './PortfolioConnectionCard';
+import type { PortfolioStatus } from '@/lib/feedback-types';
 
-export function SettingsView({ initial }: { initial: SV }) {
+export function SettingsView({ initial, portfolio }: { initial: SV; portfolio: PortfolioStatus }) {
   const router = useRouter();
   const toast = useToast();
   const [s, setS] = useState(initial);
@@ -156,6 +158,8 @@ export function SettingsView({ initial }: { initial: SV }) {
               <button type="button" className="btn" onClick={changePw}>Ganti password</button>
               <p className="hint">Setelah diganti, sesi admin di perangkat lain berakhir.</p>
             </section>
+
+            <PortfolioConnectionCard initial={portfolio} />
 
             <section className="card"><h2>Koneksi</h2>
               <div className="srow"><span className="dot" aria-hidden="true" style={online ? undefined : { background: 'var(--rj)' }} /><div className="t"><b>Status koneksi</b><span className="hint">{online ? 'Online. Halaman offline tersedia jika sinyal hilang.' : 'Offline. Perubahan baru bisa disimpan setelah tersambung.'}</span></div></div>
