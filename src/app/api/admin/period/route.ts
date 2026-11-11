@@ -1,4 +1,4 @@
-import { requireAdmin } from '@/lib/auth';
+import { requireSuperAdmin } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { HttpError, json, route } from '@/lib/http';
 import { listReceiptObjects } from '@/lib/storage';
@@ -6,7 +6,7 @@ import { listReceiptObjects } from '@/lib/storage';
 export const runtime = 'nodejs';
 
 export const GET = route(async () => {
-  await requireAdmin();
+  await requireSuperAdmin();
   const [setting, members, periods] = await Promise.all([
     db.setting.findUnique({ where: { id: 1 }, select: { periodName: true, periodStartedAt: true, amount: true, target: true } }),
     db.member.findMany({ select: { status: true, receiptKey: true } }),
