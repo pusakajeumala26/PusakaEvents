@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { requireAdmin } from '@/lib/auth';
+import { requireSuperAdmin } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { HttpError, route } from '@/lib/http';
 
@@ -12,7 +12,7 @@ const cell = (value: string | number) => {
 };
 
 export const GET = route<Context>(async (_req, context) => {
-  await requireAdmin();
+  await requireSuperAdmin();
   const { id } = z.object({ id: z.string().uuid() }).parse(await context.params);
   const period = await db.period.findUnique({ where: { id } });
   if (!period) throw new HttpError(404, 'Riwayat periode tidak ditemukan.');
