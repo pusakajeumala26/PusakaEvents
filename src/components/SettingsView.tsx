@@ -2,8 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { api, postJson } from '@/lib/api-client';
-import { PASSWORD_MIN } from '@/lib/constants';
+import { api } from '@/lib/api-client';
 import { formatDateOnly } from '@/lib/format';
 import type { SettingsView as SV } from '@/lib/types';
 import { PageHeader } from './AppShell';
@@ -11,11 +10,8 @@ import { DatePicker } from './DatePicker';
 import { Ic } from './Ic';
 import { ImportModal } from './ImportModal';
 import { useToast } from './ToastProvider';
-import { PeriodManager } from './PeriodManager';
-import { PortfolioConnectionCard } from './PortfolioConnectionCard';
-import type { PortfolioStatus } from '@/lib/feedback-types';
 
-export function SettingsView({ initial, portfolio }: { initial: SV; portfolio: PortfolioStatus }) {
+export function SettingsView({ initial }: { initial: SV }) {
   const router = useRouter();
   const toast = useToast();
   const [s, setS] = useState(initial);
@@ -23,8 +19,6 @@ export function SettingsView({ initial, portfolio }: { initial: SV; portfolio: P
   const [errs, setErrs] = useState<Record<string, string>>({});
   const [date, setDate] = useState(false);
   const [imp, setImp] = useState(false);
-  const [pw, setPw] = useState('');
-  const [pwErr, setPwErr] = useState('');
   const [online, setOnline] = useState(true);
 
   useEffect(() => {
@@ -90,25 +84,13 @@ export function SettingsView({ initial, portfolio }: { initial: SV; portfolio: P
     }
   };
 
-  const changePw = async () => {
-    setPwErr('');
-    if (pw.length < PASSWORD_MIN) return setPwErr(`Password admin minimal ${PASSWORD_MIN} karakter.`);
-    try {
-      await postJson('/api/admin/password', { newPassword: pw });
-      setPw('');
-      toast('Password admin diganti.');
-    } catch (e) {
-      setPwErr((e as Error).message);
-    }
-  };
-
   const num = (k: 'amount' | 'target') => (e: React.ChangeEvent<HTMLInputElement>) => setS((x) => ({ ...x, [k]: Number(e.target.value.replace(/\D/g, '')) || 0 }));
   const txt = (k: 'bankName' | 'accountNumber' | 'accountName') => (e: React.ChangeEvent<HTMLInputElement>) => setS((x) => ({ ...x, [k]: e.target.value }));
   const E = ({ k }: { k: string }) => (errs[k] ? <span className="emsg" role="alert"><Ic n="i-alert" />{errs[k]}</span> : null);
 
   return (
     <>
-      <PageHeader title="Pengaturan" sub="Kas, pendaftaran, data anggota, periode, dan keamanan" mobileSub="Kas, data, periode, keamanan" admin />
+      <PageHeader title="Pengaturan" sub="Kas, pendaftaran, dan data anggota" mobileSub="Kas, pendaftaran, data" admin />
       <div className="content">
         <div className="sgrid">
           <div className="setting-left">
@@ -125,7 +107,6 @@ export function SettingsView({ initial, portfolio }: { initial: SV; portfolio: P
             </div>
             <button type="submit" className="btn pri" disabled={busy}>{busy ? 'Menyimpan...' : 'Simpan perubahan'}</button>
           </form>
-          <PeriodManager />
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -148,18 +129,6 @@ export function SettingsView({ initial, portfolio }: { initial: SV; portfolio: P
               </div>
               <p className="hint">Ekspor berisi nama, nomor, status, dan alasan penolakan. File CSV bisa dibuka langsung di Excel.</p>
             </section>
-
-            <section className="card"><h2>Keamanan admin</h2>
-              <div className="f">
-                <label className="lbl" htmlFor="npw">Password admin baru</label>
-                <input className={`inp${pwErr ? ' bad' : ''}`} id="npw" type="password" autoComplete="new-password" value={pw} onChange={(e) => setPw(e.target.value)} aria-invalid={!!pwErr} aria-describedby="npw-h" />
-                {pwErr ? <span className="emsg" id="npw-h" role="alert"><Ic n="i-alert" />{pwErr}</span> : <span className="hint" id="npw-h">Minimal {PASSWORD_MIN} karakter.</span>}
-              </div>
-              <button type="button" className="btn" onClick={changePw}>Ganti password</button>
-              <p className="hint">Setelah diganti, sesi admin di perangkat lain berakhir.</p>
-            </section>
-
-            <PortfolioConnectionCard initial={portfolio} />
 
             <section className="card"><h2>Koneksi</h2>
               <div className="srow"><span className="dot" aria-hidden="true" style={online ? undefined : { background: 'var(--rj)' }} /><div className="t"><b>Status koneksi</b><span className="hint">{online ? 'Online. Halaman offline tersedia jika sinyal hilang.' : 'Offline. Perubahan baru bisa disimpan setelah tersambung.'}</span></div></div>

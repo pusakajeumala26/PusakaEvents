@@ -2,7 +2,7 @@ import bcrypt from 'bcryptjs';
 import { assertSameOrigin, clientIp, HttpError, json, rateLimit, readJson, route } from '@/lib/http';
 import { db } from '@/lib/db';
 import { deadlineFromInput } from '@/lib/members';
-import { requireAdmin } from '@/lib/auth';
+import { requireSuperAdmin } from '@/lib/auth';
 import { deleteReceiptPrefix, listReceiptObjects } from '@/lib/storage';
 import { closePeriodWorkflow } from '@/lib/period-close';
 import { periodCloseBody } from '@/lib/validation';
@@ -13,7 +13,7 @@ export const maxDuration = 60;
 
 export const POST = route(async (req: Request) => {
   assertSameOrigin(req);
-  await requireAdmin();
+  await requireSuperAdmin();
   rateLimit(`period-close:${clientIp(req)}`, 4, 15 * 60_000);
   const input = periodCloseBody.parse(await readJson(req));
 

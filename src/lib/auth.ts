@@ -9,8 +9,10 @@ import { HttpError } from './http';
 import { loadSettings } from './settings';
 
 export const ADMIN_COOKIE = 'pe_admin';
+export const SUPER_COOKIE = 'pe_super';
 export const MEMBER_COOKIE = 'pe_member';
 const ADMIN_MAX_AGE_S = 60 * 30;
+const SUPER_MAX_AGE_S = 60 * 15;
 const MEMBER_MAX_AGE_S = 60 * 60 * 24 * 14;
 
 const secretKey = () => new TextEncoder().encode(requireEnv('SESSION_SECRET'));
@@ -100,6 +102,53 @@ export const checkAdmin = checkAdminCookie;
 /** Untuk route handler: lempar 401 jika bukan admin. */
 export async function requireAdmin() {
   if (!(await checkAdminCookie())) throw new HttpError(401, 'Sesi admin berakhir. Masuk lagi sebagai admin.');
+}
+
+/* ------------------------------ super admin ------------------------------ */
+
+/** Password super admin hanya dari env SUPER_ADMIN_PASSWORD (terpisah dari password admin). */
+export function verifySuperAdminPassword(password: string): boolean {
+  const expected = process.env.SUPER_ADMIN_PASSWORD;
+  if (!expected || !password) return false;
+  const a = Buffer.from(password);
+  const b = Buffer.from(expected);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
+export const isSuperAdminConfigured = () => Boolean(process.env.SUPER_ADMIN_PASSWORD);
+
+export async function createSuperAdminSession() {
+  const now = Math.floor(Date.now() / 1000);
+  const token = await new SignJWT({ role: 'super' })
+    .setProtectedHeader({ alg: 'HS256' })
+    .setIssuedAt(now)
+    .setExpirationTime(`${SUPER_MAX_AGE_S}s`)
+    .sign(secretKey());
+  (await cookies()).set(SUPER_COOKIE, token, cookieOpts(SUPER_MAX_AGE_S));
+}
+
+export async function clearSuperAdminSession() {
+  (await cookies()).delete(SUPER_COOKIE);
+}
+
+async function checkSuperCookie(): Promise<boolean> {
+  const token = (await cookies()).get(SUPER_COOKIE)?.value;
+  if (!token || !isSuperAdminConfigured()) return false;
+  try {
+    const { payload } = await jwtVerify(token, secretKey(), { algorithms: ['HS256'] });
+    if (payload.role !== 'super' || typeof payload.iat !== 'number' || typeof payload.exp !== 'number') return false;
+    return payload.exp - payload.iat <= SUPER_MAX_AGE_S;
+  } catch {
+    return false;
+  }
+}
+
+/** Untuk Server Components (satu pengecekan per request). */
+export const isSuperAdmin = cache(checkSuperCookie);
+
+/** Untuk route handler: lempar 401 jika sesi super admin tidak ada atau habis. */
+export async function requireSuperAdmin() {
+  if (!(await checkSuperCookie())) throw new HttpError(401, 'Sesi super admin berakhir. Buka kunci Super Admin lagi.');
 }
 
 /* ------------------------------ anggota ------------------------------ */

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { requireAdmin } from '@/lib/auth';
+import { requireSuperAdmin } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { assertSameOrigin, HttpError, json, route } from '@/lib/http';
 import { deleteReceiptPrefix } from '@/lib/storage';
@@ -11,7 +11,7 @@ type Context = { params: Promise<{ id: string }> };
 
 export const POST = route<Context>(async (req, context) => {
   assertSameOrigin(req);
-  await requireAdmin();
+  await requireSuperAdmin();
   const { id } = z.object({ id: z.string().uuid() }).parse(await context.params);
   const period = await db.period.findUnique({ where: { id } });
   if (!period) throw new HttpError(404, 'Riwayat periode tidak ditemukan.');
