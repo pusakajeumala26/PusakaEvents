@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { api } from '@/lib/api-client';
 import { useDialog } from '@/lib/use-dialog';
 import { Ic } from './Ic';
@@ -10,10 +10,14 @@ import { InstallButton } from './InstallButton';
 import { useToast } from './ToastProvider';
 import { AdminSessionGuard } from './AdminSessionGuard';
 import { ContactsModal } from './ContactsModal';
+import { FeedbackDialog } from './FeedbackForm';
 
 const MenuCtx = createContext<() => void>(() => {});
 
-type NavItem = { href: string; label: string; icon: string; admin?: boolean; badge?: number; action?: 'contacts' };
+type NavItem = { href: string; label: string; icon: string; admin?: boolean; badge?: number; action?: 'contacts' | 'feedback' };
+type NavAction = 'contacts' | 'feedback';
+
+const FEEDBACK_AUTO_OPEN_MS = 3000;
 
 export function AppShell({
   admin, pending, letingName, children,
@@ -26,6 +30,8 @@ export function AppShell({
   const path = usePathname();
   const [menuPhase, setMenuPhase] = useState<'closed' | 'opening' | 'open' | 'closing'>('closed');
   const [contactsOpen, setContactsOpen] = useState(false);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const autoPrompted = useRef(false);
 
   const openMenu = () => setMenuPhase('opening');
   const closeMenu = () => setMenuPhase((phase) => phase === 'closed' ? phase : 'closing');
@@ -37,6 +43,27 @@ export function AppShell({
       setContactsOpen(true);
     }
   };
+
+  const showFeedback = () => {
+    if (menuPhase !== 'closed') {
+      closeMenu();
+      window.setTimeout(() => setFeedbackOpen(true), 270);
+    } else {
+      setFeedbackOpen(true);
+    }
+  };
+  const runAction = (action: NavAction) => (action === 'contacts' ? showContacts() : showFeedback());
+
+  // Modal feedback terbuka sendiri ~3 detik setelah beranda dimuat (sekali per pemuatan halaman; admin tidak diganggu).
+  useEffect(() => {
+    if (path !== '/' || admin || autoPrompted.current) return;
+    const timer = window.setTimeout(() => {
+      if (autoPrompted.current || document.querySelector('.scrim')) return;
+      autoPrompted.current = true;
+      setFeedbackOpen(true);
+    }, FEEDBACK_AUTO_OPEN_MS);
+    return () => window.clearTimeout(timer);
+  }, [path, admin]);
 
   useEffect(() => {
     if (menuPhase === 'opening') {
@@ -56,10 +83,11 @@ export function AppShell({
   const items: NavItem[] = [
     { href: '/', label: 'Beranda', icon: 'i-home' },
     { href: '/anggota', label: 'Data anggota', icon: 'i-user' },
-    { href: '/masukan', label: 'Kirim masukan', icon: 'i-chat' },
+    { href: '#feedback', label: 'Beri Feedback', icon: 'i-chat', action: 'feedback' },
     { href: '#contacts', label: 'Hubungi pengurus', icon: 'i-chat', action: 'contacts' },
     { href: '/verifikasi', label: 'Verifikasi Struk', icon: 'i-shield', admin: true, badge: admin ? pending : 0 },
     { href: '/rekap', label: 'Rekap Kas', icon: 'i-wallet', admin: true },
+    { href: '/feedback', label: 'Feedback', icon: 'i-chat', admin: true },
     { href: '/pengaturan', label: 'Pengaturan', icon: 'i-sliders', admin: true },
   ];
 
@@ -69,7 +97,7 @@ export function AppShell({
         <div className="app">
           <aside className="side">
             <Brand letingName={letingName} />
-            <Nav items={items} admin={admin} path={path} onContacts={showContacts} />
+            <Nav items={items} admin={admin} path={path} onAction={runAction} />
             <Foot admin={admin} />
           </aside>
           <div className="main route-enter" key={path}>{children}</div>
@@ -82,10 +110,11 @@ export function AppShell({
             letingName={letingName}
             open={menuPhase === 'open'}
             onClose={closeMenu}
-            onContacts={showContacts}
+            onAction={runAction}
           />
         )}
         {contactsOpen && <ContactsModal onClose={() => setContactsOpen(false)} />}
+        {feedbackOpen && <FeedbackDialog onClose={() => setFeedbackOpen(false)} />}
         {admin && <AdminSessionGuard />}
       </div>
     </MenuCtx.Provider>
@@ -104,7 +133,7 @@ function Brand({ letingName }: { letingName: string }) {
   );
 }
 
-function Nav({ items, admin, path, onContacts }: { items: NavItem[]; admin: boolean; path: string; onContacts: () => void }) {
+function Nav({ items, admin, path, onAction }: { items: NavItem[]; admin: boolean; path: string; onAction: (action: NavAction) => void }) {
   const on = (href: string) => (href === '/' ? path === '/' : path.startsWith(href));
   const content = (it: NavItem) => (
     <>
@@ -116,8 +145,8 @@ function Nav({ items, admin, path, onContacts }: { items: NavItem[]; admin: bool
       )}
     </>
   );
-  const link = (it: NavItem) => it.action === 'contacts' ? (
-    <button key={it.href} type="button" className="nav nav-action" onClick={onContacts}>{content(it)}</button>
+  const link = (it: NavItem) => it.action ? (
+    <button key={it.href} type="button" className="nav nav-action" onClick={() => onAction(it.action!)}>{content(it)}</button>
   ) : (
     <Link key={it.href} className={`nav${on(it.href) ? ' on' : ''}`} href={it.href} aria-current={on(it.href) ? 'page' : undefined}>
       {content(it)}
@@ -170,7 +199,7 @@ function Foot({ admin }: { admin: boolean }) {
 }
 
 function Drawer({
-  items, admin, path, letingName, open, onClose, onContacts,
+  items, admin, path, letingName, open, onClose, onAction,
 }: {
   items: NavItem[];
   admin: boolean;
@@ -178,7 +207,7 @@ function Drawer({
   letingName: string;
   open: boolean;
   onClose: () => void;
-  onContacts: () => void;
+  onAction: (action: NavAction) => void;
 }) {
   const ref = useDialog<HTMLElement>(onClose);
   return (
@@ -192,7 +221,7 @@ function Drawer({
           </div>
           <button type="button" className="ib ol" aria-label="Tutup menu" onClick={onClose}><Ic n="i-x" /></button>
         </div>
-        <Nav items={items} admin={admin} path={path} onContacts={onContacts} />
+        <Nav items={items} admin={admin} path={path} onAction={onAction} />
         <Foot admin={admin} />
       </nav>
     </div>
