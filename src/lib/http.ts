@@ -1,16 +1,24 @@
 import { ZodError } from 'zod';
 
 export class HttpError extends Error {
+  public status: number;
+  public code?: string;
+  public retryAfterSeconds?: number;
+
   constructor(
-    public status: number,
+    status: number,
     message: string,
-    public code?: string,
+    code?: string,
+    retryAfterSeconds?: number,
   ) {
     super(message);
+    this.status = status;
+    this.code = code;
+    this.retryAfterSeconds = retryAfterSeconds;
   }
 }
 
-export const json = (body: unknown, status = 200) => Response.json(body, { status });
+export const json = (body: unknown, status = 200, headers?: HeadersInit) => Response.json(body, { status, headers });
 
 /** Pembungkus route handler: ubah error jadi JSON { error } dengan status yang tepat. */
 export function route<C = unknown>(fn: (req: Request, ctx: C) => Promise<Response>) {
@@ -18,7 +26,10 @@ export function route<C = unknown>(fn: (req: Request, ctx: C) => Promise<Respons
     try {
       return await fn(req, ctx);
     } catch (e) {
-      if (e instanceof HttpError) return json({ error: e.message, ...(e.code ? { code: e.code } : {}) }, e.status);
+      if (e instanceof HttpError) {
+        const headers = e.retryAfterSeconds ? { 'Retry-After': String(e.retryAfterSeconds) } : undefined;
+        return json({ error: e.message, ...(e.code ? { code: e.code } : {}) }, e.status, headers);
+      }
       if (e instanceof ZodError) return json({ error: e.issues[0]?.message ?? 'Data tidak valid.' }, 422);
       const cause = e as { name?: string; code?: string };
       console.error('[api] request failed', { name: cause.name ?? 'UnknownError', code: cause.code ?? 'UNKNOWN' });
@@ -63,7 +74,8 @@ export function rateLimit(key: string, limit: number, windowMs: number) {
   b.n += 1;
   if (b.n > limit) {
     const wait = Math.ceil((b.reset - now) / 60000);
-    throw new HttpError(429, `Terlalu banyak percobaan. Coba lagi sekitar ${wait} menit lagi.`);
+    const retryAfterSeconds = Math.max(1, Math.ceil((b.reset - now) / 1000));
+    throw new HttpError(429, `Terlalu banyak percobaan. Coba lagi sekitar ${wait} menit lagi.`, 'RATE_LIMITED', retryAfterSeconds);
   }
 }
 

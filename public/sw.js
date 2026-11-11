@@ -58,6 +58,7 @@ self.addEventListener('fetch', (event) => {
   if (url.pathname.startsWith('/api/')) return;
 
   if (request.mode === 'navigate') {
+    // Semua halaman aplikasi, termasuk /masukan, hanya diambil dari jaringan dan tidak disimpan ke cache.
     event.respondWith(
       fetch(request).catch(async () => (await caches.match(OFFLINE_URL)) || Response.error()),
     );
