@@ -18,7 +18,7 @@ type FeedbackHandlerDeps = {
 };
 
 /**
- * POST multipart/form-data: name, role, message, rating, consent, avatar (opsional), website (honeypot).
+ * POST multipart/form-data: name, role, roleDetail, message, rating, consent, avatar (opsional), website (honeypot).
  * Feedback disimpan lebih dulu; pengiriman ke portfolio terjadi di latar belakang lewat antrean,
  * sehingga pengunjung tidak pernah kehilangan masukan karena portfolio sedang bermasalah.
  */
@@ -57,6 +57,7 @@ export function createFeedbackHandler({
       const parsed = parseFeedbackFields({
         name: text('name'),
         role: text('role'),
+        roleDetail: text('roleDetail'),
         message: text('message'),
         rating: text('rating'),
         consent: text('consent'),
