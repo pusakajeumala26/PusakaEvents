@@ -90,8 +90,8 @@ export function AppShell({
     { href: '/rekap', label: 'Rekap Kas', icon: 'i-wallet', admin: true },
     { href: '/feedback', label: 'Feedback', icon: 'i-chat', admin: true },
     { href: '/pengaturan', label: 'Pengaturan', icon: 'i-sliders', admin: true },
-    { href: '/super-admin/mcp', label: 'MCP Server', icon: 'i-chat', superAdmin: true },
-    { href: '/super-admin/security', label: 'Security', icon: 'i-shield', superAdmin: true },
+    { href: '/super-admin/mcp', label: 'MCP Server', icon: 'i-mcp', superAdmin: true },
+    { href: '/super-admin/security', label: 'Security', icon: 'i-shield-lock', superAdmin: true },
   ];
 
   return (
