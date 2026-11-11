@@ -75,10 +75,9 @@ Ambil `s3_endpoint` dan `region` dari balasannya. Isi ke env:
 | --- | --- |
 | `ADMIN_PASSWORD` | password admin awal (ganti lewat Pengaturan setelah masuk) |
 | `SESSION_SECRET` | acak panjang: `openssl rand -base64 32` |
-| `PORTFOLIO_MCP_URL` | endpoint server MCP portfolio; hanya server |
-| `PORTFOLIO_MCP_API_KEY` | key MCP portfolio; hanya server, jangan gunakan `NEXT_PUBLIC_` |
+| `CRON_SECRET` | (opsional) acak panjang untuk Vercel Cron feedback |
 
-Feedback portfolio memakai `PORTFOLIO_MCP_URL` dan `PORTFOLIO_MCP_API_KEY`, hanya di server. Atur keduanya di environment Vercel (dan `.env.local` untuk development). Lihat [docs/feedback.md](docs/feedback.md) untuk alur, privasi, serta rotasi key.
+URL dan API key MCP portfolio diatur admin lewat halaman Pengaturan (disimpan terenkripsi di database), bukan lewat env. Lihat [docs/feedback.md](docs/feedback.md) untuk alur, antrean, privasi, serta rotasi key.
 
 Salin `.env.example` ke `.env.local` untuk dev lokal.
 
