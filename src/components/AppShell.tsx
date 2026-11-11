@@ -14,15 +14,16 @@ import { FeedbackDialog } from './FeedbackForm';
 
 const MenuCtx = createContext<() => void>(() => {});
 
-type NavItem = { href: string; label: string; icon: string; admin?: boolean; badge?: number; action?: 'contacts' | 'feedback' };
+type NavItem = { href: string; label: string; icon: string; admin?: boolean; superAdmin?: boolean; badge?: number; action?: 'contacts' | 'feedback' };
 type NavAction = 'contacts' | 'feedback';
 
 const FEEDBACK_AUTO_OPEN_MS = 3000;
 
 export function AppShell({
-  admin, pending, letingName, children,
+  admin, superAdmin, pending, letingName, children,
 }: {
   admin: boolean;
+  superAdmin: boolean;
   pending: number;
   letingName: string;
   children: ReactNode;
@@ -89,6 +90,8 @@ export function AppShell({
     { href: '/rekap', label: 'Rekap Kas', icon: 'i-wallet', admin: true },
     { href: '/feedback', label: 'Feedback', icon: 'i-chat', admin: true },
     { href: '/pengaturan', label: 'Pengaturan', icon: 'i-sliders', admin: true },
+    { href: '/super-admin/mcp', label: 'MCP Server', icon: 'i-chat', superAdmin: true },
+    { href: '/super-admin/security', label: 'Security', icon: 'i-shield', superAdmin: true },
   ];
 
   return (
@@ -97,8 +100,8 @@ export function AppShell({
         <div className="app">
           <aside className="side">
             <Brand letingName={letingName} />
-            <Nav items={items} admin={admin} path={path} onAction={runAction} />
-            <Foot admin={admin} />
+            <Nav items={items} admin={admin} superAdmin={superAdmin} path={path} onAction={runAction} />
+            <Foot admin={admin} superAdmin={superAdmin} />
           </aside>
           <div className="main route-enter" key={path}>{children}</div>
         </div>
@@ -106,6 +109,7 @@ export function AppShell({
           <Drawer
             items={items}
             admin={admin}
+            superAdmin={superAdmin}
             path={path}
             letingName={letingName}
             open={menuPhase === 'open'}
@@ -133,7 +137,7 @@ function Brand({ letingName }: { letingName: string }) {
   );
 }
 
-function Nav({ items, admin, path, onAction }: { items: NavItem[]; admin: boolean; path: string; onAction: (action: NavAction) => void }) {
+function Nav({ items, admin, superAdmin, path, onAction }: { items: NavItem[]; admin: boolean; superAdmin: boolean; path: string; onAction: (action: NavAction) => void }) {
   const on = (href: string) => (href === '/' ? path === '/' : path.startsWith(href));
   const content = (it: NavItem) => (
     <>
@@ -142,6 +146,9 @@ function Nav({ items, admin, path, onAction }: { items: NavItem[]; admin: boolea
       {!!it.badge && <span className="cnt" aria-label={`${it.badge} menunggu`}>{it.badge}</span>}
       {it.admin && !admin && (
         <span className="lk"><Ic n="i-lock" size={16} /><span className="sr"> (khusus admin)</span></span>
+      )}
+      {it.superAdmin && !superAdmin && (
+        <span className="lk"><Ic n="i-lock" size={16} /><span className="sr"> (khusus super admin)</span></span>
       )}
     </>
   );
@@ -156,17 +163,21 @@ function Nav({ items, admin, path, onAction }: { items: NavItem[]; admin: boolea
     <>
       <nav className="ng" aria-label="Umum">
         <div className="cap">Umum</div>
-        {items.filter((i) => !i.admin).map(link)}
+        {items.filter((i) => !i.admin && !i.superAdmin).map(link)}
       </nav>
       <nav className="ng" aria-label="Admin">
         <div className="cap">Admin</div>
         {items.filter((i) => i.admin).map(link)}
       </nav>
+      <nav className="ng" aria-label="Super Admin">
+        <div className="cap">Super Admin</div>
+        {items.filter((i) => i.superAdmin).map(link)}
+      </nav>
     </>
   );
 }
 
-function Foot({ admin }: { admin: boolean }) {
+function Foot({ admin, superAdmin }: { admin: boolean; superAdmin: boolean }) {
   const router = useRouter();
   const toast = useToast();
   const logout = async () => {
@@ -183,9 +194,24 @@ function Foot({ admin }: { admin: boolean }) {
       toast((e as Error).message, 'error');
     }
   };
+  const lockSuper = async () => {
+    try {
+      await api('/api/admin/super-admin/logout', { method: 'POST' });
+      router.push('/');
+      router.refresh();
+    } catch (e) {
+      toast((e as Error).message, 'error');
+    }
+  };
   return (
     <div className="foot">
       <InstallButton />
+      {superAdmin && (
+        <>
+          <div className="adm"><span className="dot" aria-hidden="true" />Super admin terbuka</div>
+          <button type="button" className="btn ghost blk" onClick={lockSuper}><Ic n="i-lock" />Kunci super admin</button>
+        </>
+      )}
       {admin ? (
         <>
           <div className="adm"><span className="dot" aria-hidden="true" />Mode admin aktif</div>
@@ -199,10 +225,11 @@ function Foot({ admin }: { admin: boolean }) {
 }
 
 function Drawer({
-  items, admin, path, letingName, open, onClose, onAction,
+  items, admin, superAdmin, path, letingName, open, onClose, onAction,
 }: {
   items: NavItem[];
   admin: boolean;
+  superAdmin: boolean;
   path: string;
   letingName: string;
   open: boolean;
@@ -221,8 +248,8 @@ function Drawer({
           </div>
           <button type="button" className="ib ol" aria-label="Tutup menu" onClick={onClose}><Ic n="i-x" /></button>
         </div>
-        <Nav items={items} admin={admin} path={path} onAction={onAction} />
-        <Foot admin={admin} />
+        <Nav items={items} admin={admin} superAdmin={superAdmin} path={path} onAction={onAction} />
+        <Foot admin={admin} superAdmin={superAdmin} />
       </nav>
     </div>
   );
