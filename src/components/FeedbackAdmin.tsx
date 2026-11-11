@@ -22,7 +22,6 @@ export function FeedbackAdmin({ rows }: { rows: FeedbackRowView[] }) {
   const [busyId, setBusyId] = useState('');
 
   const resend = async (row: FeedbackRowView) => {
-    if (row.uncertain && !window.confirm('Pengiriman sebelumnya tidak pasti: portfolio mungkin sudah menerimanya. Kirim ulang bisa membuat duplikat. Lanjutkan?')) return;
     setBusyId(row.id);
     try {
       await api(`/api/admin/feedback/${row.id}/resend`, { method: 'POST' });
@@ -62,7 +61,6 @@ export function FeedbackAdmin({ rows }: { rows: FeedbackRowView[] }) {
                   {row.syncStatus === 'SENT' && row.sentAt && <span>Terkirim {time(row.sentAt)}</span>}
                   {row.syncStatus === 'QUEUED' && row.nextAttemptAt && <span>Coba lagi {time(row.nextAttemptAt)}</span>}
                   {row.lastErrorText && <span>Penyebab: {row.lastErrorText}</span>}
-                  {row.uncertain && <span>Pengiriman tidak pasti: portfolio mungkin sudah menerimanya.</span>}
                 </div>
                 {row.syncStatus !== 'SENT' && (
                   <div className="acts">
