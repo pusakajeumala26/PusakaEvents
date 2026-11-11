@@ -1,12 +1,12 @@
 import { AppShell } from '@/components/AppShell';
-import { isAdmin } from '@/lib/auth';
+import { isAdmin, isSuperAdmin } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { getSettings } from '@/lib/settings';
 
 export const dynamic = 'force-dynamic';
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
-  const [settings, admin] = await Promise.all([getSettings(), isAdmin()]);
+  const [settings, admin, superAdmin] = await Promise.all([getSettings(), isAdmin(), isSuperAdmin()]);
   let pending = 0;
   if (admin) {
     try {
@@ -17,7 +17,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     }
   }
   return (
-    <AppShell letingName={settings.letingName} admin={admin} pending={pending}>
+    <AppShell letingName={settings.letingName} admin={admin} superAdmin={superAdmin} pending={pending}>
       {children}
     </AppShell>
   );
