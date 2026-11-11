@@ -2645,3 +2645,110 @@ select.inp {
   height: 100dvh;
   overflow: auto
 }
+
+/* ---------- feedback: modal, foto, admin ---------- */
+.feedback-scrim .dlg {
+  max-width: 600px
+}
+
+.feedback-scrim .feedback-fields {
+  grid-template-columns: minmax(0, 1fr)
+}
+
+.fb-photo {
+  display: flex;
+  align-items: center;
+  gap: 14px
+}
+
+.fb-photo-act {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px
+}
+
+.fb-av {
+  object-fit: cover
+}
+
+.pf-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px
+}
+
+.pf-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 12px 0
+}
+
+.pf-status .hint {
+  flex-basis: 100%
+}
+
+.fb-admin {
+  width: 100%;
+  max-width: 920px;
+  margin: 0 auto;
+  align-self: stretch
+}
+
+.fb-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px
+}
+
+.fb-item {
+  display: flex;
+  flex-direction: column;
+  gap: 10px
+}
+
+.fb-head {
+  display: flex;
+  align-items: center;
+  gap: 12px
+}
+
+.fb-head .t {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column
+}
+
+.fb-head img.av {
+  object-fit: cover
+}
+
+.fb-stars {
+  margin: 0;
+  letter-spacing: 2px;
+  font-size: 18px
+}
+
+.fb-msg {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.55
+}
+
+.fb-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px
+}
+
+@media (max-width:640px) {
+  .fb-head {
+    flex-wrap: wrap
+  }
+}
