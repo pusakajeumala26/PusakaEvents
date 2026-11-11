@@ -1,237 +1,396 @@
-import test from 'node:test';
 import assert from 'node:assert/strict';
-import { submitPortfolioFeedback } from '../src/lib/portfolio-feedback-core.ts';
+import test from 'node:test';
+import {
+  MAX_ATTEMPTS,
+  backoffDelayMs,
+  classifyThrown,
+  parseMcpUrl,
+  parseRetryAfter,
+  planAfterFailure,
+  submitPortfolioFeedback,
+  testPortfolioConnection,
+} from '../src/lib/portfolio-feedback-core.ts';
+import { decryptSecret, encryptSecret, keyHint } from '../src/lib/portfolio-secret.ts';
+
+const config = { url: 'https://portfolio.example.com/api/mcp', apiKey: 'mcp_live_secret_value_1234' };
+const input = { name: 'Budi', message: 'Aplikasinya sangat membantu.', rating: 5, role: 'Anggota', project: 'PusakaEvents' };
+
+const reply = (body, init = {}) =>
+  async () => new Response(typeof body === 'string' ? body : JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' }, ...init });
+const ok = { jsonrpc: '2.0', id: '1', result: { structuredContent: { id: 'fb_1', status: 'pending' } } };
+
+test('mengirim sesuai kontrak tool submit_feedback dengan Bearer key', async () => {
+  let seen;
+  const result = await submitPortfolioFeedback(input, config, {
+    fetchImpl: async (url, init) => {
+      seen = { url, init, body: JSON.parse(init.body) };
+      return new Response(JSON.stringify(ok), { status: 200 });
+    },
+  });
+  assert.deepEqual(result, { ok: true, remoteId: 'fb_1' });
+  assert.equal(seen.url, config.url);
+  assert.equal(seen.init.method, 'POST');
+  assert.equal(seen.init.headers.Authorization, `Bearer ${config.apiKey}`);
+  assert.equal(seen.init.redirect, 'manual');
+  assert.equal(seen.body.method, 'tools/call');
+  assert.equal(seen.body.params.name, 'submit_feedback');
+  assert.deepEqual(seen.body.params.arguments, input);
+});
+
+test('klasifikasi status HTTP', async () => {
+  const cases = [
+    [401, 'unauthorized', false],
+    [403, 'unauthorized', false],
+    [429, 'rate_limited', false],
+    [500, 'server', true],
+    [503, 'server', true],
+    [400, 'invalid', false],
+    [404, 'invalid', false],
+  ];
+  for (const [status, kind, uncertain] of cases) {
+    const result = await submitPortfolioFeedback(input, config, { fetchImpl: async () => new Response('x', { status }) });
+    assert.equal(result.ok, false);
+    assert.equal(result.kind, kind, `status ${status}`);
+    assert.equal(result.uncertain, uncertain, `uncertain ${status}`);
+    assert.equal(result.httpStatus, status);
+  }
+});
+
+test('429 membaca Retry-After (detik dan tanggal)', async () => {
+  const result = await submitPortfolioFeedback(input, config, {
+    fetchImpl: async () => new Response('', { status: 429, headers: { 'retry-after': '45' } }),
+  });
+  assert.equal(result.retryAfterMs, 45_000);
+  assert.equal(parseRetryAfter('120'), 120_000);
+  assert.equal(parseRetryAfter('abc'), undefined);
+  assert.equal(parseRetryAfter(null), undefined);
+  const now = Date.parse('2026-01-01T00:00:00Z');
+  assert.equal(parseRetryAfter('Thu, 01 Jan 2026 00:01:00 GMT', now), 60_000);
+  assert.equal(parseRetryAfter('999999999'), 6 * 60 * 60_000);
+});
+
+test('isError true pada HTTP 200 dianggap invalid dan tidak diulang', async () => {
+  const result = await submitPortfolioFeedback(input, config, {
+    fetchImpl: reply({ jsonrpc: '2.0', id: '1', result: { isError: true, content: [{ type: 'text', text: 'bad' }] } }),
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.kind, 'invalid');
+  assert.equal(result.uncertain, false);
+  assert.equal(planAfterFailure(result, 1, new Date()).status, 'failed');
+});
+
+test('error DNS, jaringan, dan timeout dibedakan', async () => {
+  const dns = Object.assign(new TypeError('fetch failed'), { cause: Object.assign(new Error('getaddrinfo ENOTFOUND x'), { code: 'ENOTFOUND' }) });
+  assert.equal(classifyThrown(dns), 'dns');
+  assert.equal(classifyThrown(new TypeError('fetch failed')), 'network');
+  assert.equal(classifyThrown(Object.assign(new Error('x'), { name: 'AbortError' })), 'timeout');
+  assert.equal(classifyThrown(Object.assign(new TypeError('fetch failed'), { cause: { code: 'UND_ERR_CONNECT_TIMEOUT' } })), 'timeout');
+
+  const viaFetch = await submitPortfolioFeedback(input, config, { fetchImpl: async () => { throw dns; } });
+  assert.equal(viaFetch.kind, 'dns');
+  assert.equal(viaFetch.uncertain, false);
+});
+
+test('timeout 10 dtk memutus permintaan yang menggantung', async () => {
+  const result = await submitPortfolioFeedback(input, config, {
+    timeoutMs: 20,
+    fetchImpl: (_url, init) =>
+      new Promise((_resolve, reject) => {
+        init.signal.addEventListener('abort', () => reject(Object.assign(new Error('aborted'), { name: 'AbortError' })));
+      }),
+  });
+  assert.equal(result.kind, 'timeout');
+  assert.equal(result.uncertain, true);
+});
+
+test('redirect ditolak dan respons rusak dianggap server', async () => {
+  const redirect = await submitPortfolioFeedback(input, config, { fetchImpl: async () => new Response('', { status: 302, headers: { location: 'http://10.0.0.1' } }) });
+  assert.equal(redirect.kind, 'invalid');
+  const broken = await submitPortfolioFeedback(input, config, { fetchImpl: reply('bukan json') });
+  assert.equal(broken.kind, 'server');
+  assert.equal(broken.uncertain, true);
+  const wrongStatus = await submitPortfolioFeedback(input, config, {
+    fetchImpl: reply({ jsonrpc: '2.0', id: '1', result: { structuredContent: { id: 'x', status: 'published' } } }),
+  });
+  assert.equal(wrongStatus.kind, 'server');
+});
+
+test('respons SSE didukung', async () => {
+  const body = `event: message\ndata: ${JSON.stringify(ok)}\n\n`;
+  const result = await submitPortfolioFeedback(input, config, {
+    fetchImpl: async () => new Response(body, { status: 200, headers: { 'content-type': 'text/event-stream' } }),
+  });
+  assert.deepEqual(result, { ok: true, remoteId: 'fb_1' });
+});
+
+test('backoff eksponensial dengan jitter dan batas atas', () => {
+  const mid = () => 0.5;
+  assert.equal(backoffDelayMs(1, mid), 30_000);
+  assert.equal(backoffDelayMs(2, mid), 120_000);
+  assert.equal(backoffDelayMs(3, mid), 480_000);
+  assert.equal(backoffDelayMs(4, mid), 1_920_000);
+  assert.equal(backoffDelayMs(5, mid), 7_200_000);
+  assert.equal(backoffDelayMs(9, mid), 7_200_000);
+  assert.equal(backoffDelayMs(1, () => 0), 24_000);
+  assert.equal(backoffDelayMs(1, () => 1), 36_000);
+});
+
+test('rencana ulang: hanya penyebab sementara, maksimal 5 percobaan', () => {
+  const now = new Date('2026-01-01T00:00:00Z');
+  const mid = () => 0.5;
+  for (const kind of ['dns', 'network', 'timeout', 'rate_limited', 'server']) {
+    const plan = planAfterFailure({ kind }, 1, now, mid);
+    assert.equal(plan.status, 'queued', kind);
+    assert.equal(plan.nextAttemptAt.getTime(), now.getTime() + 30_000);
+  }
+  for (const kind of ['unauthorized', 'invalid']) {
+    assert.deepEqual(planAfterFailure({ kind }, 1, now, mid), { status: 'failed', nextAttemptAt: null }, kind);
+  }
+  assert.equal(planAfterFailure({ kind: 'network' }, MAX_ATTEMPTS - 1, now, mid).status, 'queued');
+  assert.deepEqual(planAfterFailure({ kind: 'network' }, MAX_ATTEMPTS, now, mid), { status: 'failed', nextAttemptAt: null });
+});
+
+test('Retry-After lebih lama dari backoff dihormati', () => {
+  const now = new Date('2026-01-01T00:00:00Z');
+  const plan = planAfterFailure({ kind: 'rate_limited', retryAfterMs: 600_000 }, 1, now, () => 0.5);
+  assert.equal(plan.nextAttemptAt.getTime(), now.getTime() + 600_000);
+});
+
+test('validasi URL MCP', () => {
+  assert.equal(parseMcpUrl('https://alfizilham.vercel.app/api/mcp').ok, true);
+  for (const bad of ['', 'abc', 'http://alfizilham.vercel.app/api/mcp', 'https://user:pw@a.example.com/x', 'https://localhost/x', 'https://127.0.0.1/x', 'https://10.0.0.5/x', 'https://[::1]/x', 'https://intranet/x', 'https://svc.internal/x']) {
+    assert.equal(parseMcpUrl(bad).ok, false, bad);
+  }
+});
+
+test('tes koneksi memakai tools/list dan melaporkan field yang hilang', async () => {
+  let method;
+  const tools = { jsonrpc: '2.0', id: '1', result: { tools: [{ name: 'submit_feedback', inputSchema: { properties: { name: {}, message: {}, rating: {}, role: {}, company: {}, project: {} } } }] } };
+  const result = await testPortfolioConnection(config, {
+    fetchImpl: async (_url, init) => {
+      method = JSON.parse(init.body).method;
+      return new Response(JSON.stringify(tools), { status: 200 });
+    },
+  });
+  assert.equal(method, 'tools/list');
+  assert.equal(result.ok, true);
+  assert.equal(result.toolFound, true);
+  assert.deepEqual(result.missingFields, []);
+  assert.equal(result.avatarField, null);
+
+  const missing = await testPortfolioConnection(config, { fetchImpl: reply({ result: { tools: [] } }) });
+  assert.equal(missing.toolFound, false);
+
+  const denied = await testPortfolioConnection(config, { fetchImpl: async () => new Response('', { status: 401 }) });
+  assert.equal(denied.ok, false);
+  assert.equal(denied.kind, 'unauthorized');
+});
+
+test('enkripsi key: bolak-balik, acak per enkripsi, tidak memuat teks asli', () => {
+  const secret = 'session-secret-yang-panjang-1234567890';
+  const plain = 'mcp_live_abcdef123456';
+  const a = encryptSecret(plain, secret);
+  const b = encryptSecret(plain, secret);
+  assert.notEqual(a, b);
+  assert.equal(a.includes(plain), false);
+  assert.equal(decryptSecret(a, secret), plain);
+  assert.equal(keyHint(plain), '3456');
+});
+
+test('dekripsi gagal dengan secret salah atau token dirusak', () => {
+  const token = encryptSecret('mcp_live_abcdef123456', 'secret-satu-secret-satu-secret-satu');
+  assert.throws(() => decryptSecret(token, 'secret-dua-secret-dua-secret-dua'), /SECRET_UNREADABLE/);
+  assert.throws(() => decryptSecret(token.slice(0, -3) + 'AAA', 'secret-satu-secret-satu-secret-satu'), /SECRET_UNREADABLE/);
+  assert.throws(() => decryptSecret('sampah', 'x'), /SECRET_UNREADABLE/);
+});
+
+/* ------------------------------ input ------------------------------ */
+import { initialsOf, parseFeedbackFields, sniffImage } from '../src/lib/feedback-input.ts';
+import { deliverOne } from '../src/lib/feedback-queue.ts';
+
+const base = { name: '  Budi   Santoso ', role: 'Anggota', message: 'Aplikasinya sangat membantu kami.', rating: '5', consent: 'true' };
+
+test('isian feedback: normalisasi dan validasi', () => {
+  const good = parseFeedbackFields(base);
+  assert.equal(good.ok, true);
+  assert.deepEqual(good.value, { name: 'Budi Santoso', role: 'Anggota', message: 'Aplikasinya sangat membantu kami.', rating: 5 });
+  assert.equal(parseFeedbackFields({ ...base, role: '' }).value.role, null);
+  for (const bad of [
+    { name: '' },
+    { name: 'x'.repeat(81) },
+    { role: 'Admin' },
+    { message: 'pendek' },
+    { message: 'x'.repeat(1501) },
+    { rating: '0' },
+    { rating: '6' },
+    { rating: '4.5' },
+    { rating: undefined },
+    { consent: undefined },
+  ]) {
+    assert.equal(parseFeedbackFields({ ...base, ...bad }).ok, false, JSON.stringify(bad));
+  }
+  assert.equal(parseFeedbackFields({ ...base, name: 'Ani\u0000' }).value.name, 'Ani');
+});
+
+test('magic byte gambar', () => {
+  assert.equal(sniffImage(Uint8Array.from([0xff, 0xd8, 0xff, 0xe0, 0, 0])), 'jpeg');
+  assert.equal(sniffImage(Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0])), 'png');
+  assert.equal(sniffImage(Uint8Array.from([0x52, 0x49, 0x46, 0x46, 1, 2, 3, 4, 0x57, 0x45, 0x42, 0x50])), 'webp');
+  assert.equal(sniffImage(new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg"></svg>')), null);
+  assert.equal(sniffImage(new TextEncoder().encode('GIF89a......')), null);
+  assert.equal(sniffImage(new Uint8Array()), null);
+});
+
+test('inisial avatar', () => {
+  assert.equal(initialsOf('Budi Santoso'), 'BS');
+  assert.equal(initialsOf('  alfiz  '), 'A');
+  assert.equal(initialsOf('Ata Sidqi Nur'), 'AN');
+  assert.equal(initialsOf(''), '?');
+});
+
+/* ------------------------------ antrean ------------------------------ */
+
+function memoryStore(rows) {
+  const data = new Map(rows.map((row) => [row.id, { syncStatus: 'QUEUED', attempts: 0, nextAttemptAt: null, uncertain: false, ...row }]));
+  return {
+    data,
+    async claim(id, now, leaseUntil) {
+      const row = data.get(id);
+      if (!row || row.syncStatus !== 'QUEUED' || (row.nextAttemptAt && row.nextAttemptAt > now)) return null;
+      row.attempts += 1;
+      row.nextAttemptAt = leaseUntil;
+      return { ...row };
+    },
+    async finish(id, update) {
+      Object.assign(data.get(id), update);
+    },
+  };
+}
+const queued = { id: 'a', name: 'Budi', role: 'Anggota', message: 'Aplikasinya sangat membantu.', rating: 5 };
+
+test('antrean: sukses menandai SENT dan tidak pernah dikirim lagi (idempoten)', async () => {
+  const store = memoryStore([queued]);
+  let calls = 0;
+  const send = async (payload) => {
+    calls += 1;
+    assert.deepEqual(payload, { name: 'Budi', message: queued.message, rating: 5, role: 'Anggota', project: 'PusakaEvents' });
+    return { ok: true, remoteId: 'r1' };
+  };
+  assert.equal(await deliverOne(store, 'a', send, 'PusakaEvents'), 'sent');
+  assert.equal(await deliverOne(store, 'a', send, 'PusakaEvents'), 'skipped');
+  assert.equal(calls, 1);
+  assert.equal(store.data.get('a').syncStatus, 'SENT');
+  assert.equal(store.data.get('a').remoteId, 'r1');
+});
+
+test('antrean: dua pemroses bersamaan hanya satu yang mengirim (lease)', async () => {
+  const store = memoryStore([queued]);
+  let calls = 0;
+  const send = async () => { calls += 1; await new Promise((r) => setTimeout(r, 10)); return { ok: true, remoteId: 'r1' }; };
+  const results = await Promise.all([deliverOne(store, 'a', send, 'P'), deliverOne(store, 'a', send, 'P')]);
+  assert.deepEqual(results.sort(), ['sent', 'skipped']);
+  assert.equal(calls, 1);
+});
+
+test('antrean: gagal sementara dijadwalkan ulang, lalu FAILED setelah 5 percobaan', async () => {
+  const store = memoryStore([queued]);
+  const send = async () => ({ ok: false, kind: 'timeout', uncertain: true });
+  let now = new Date('2026-01-01T00:00:00Z');
+  const outcomes = [];
+  for (let i = 0; i < 5; i++) {
+    outcomes.push(await deliverOne(store, 'a', send, 'P', now, () => 0.5));
+    const next = store.data.get('a').nextAttemptAt;
+    if (next) now = new Date(next.getTime() + 1);
+  }
+  assert.deepEqual(outcomes, ['queued', 'queued', 'queued', 'queued', 'failed']);
+  const row = store.data.get('a');
+  assert.equal(row.syncStatus, 'FAILED');
+  assert.equal(row.attempts, 5);
+  assert.equal(row.lastError, 'timeout');
+  assert.equal(row.uncertain, true);
+  assert.equal(row.nextAttemptAt, null);
+});
+
+test('antrean: belum jatuh tempo dilewati; 401 langsung FAILED tanpa ulang', async () => {
+  const store = memoryStore([{ ...queued, nextAttemptAt: new Date('2099-01-01') }]);
+  assert.equal(await deliverOne(store, 'a', async () => assert.fail('tidak boleh kirim'), 'P'), 'skipped');
+  const store2 = memoryStore([queued]);
+  const outcome = await deliverOne(store2, 'a', async () => ({ ok: false, kind: 'unauthorized', httpStatus: 401, uncertain: false }), 'P');
+  assert.equal(outcome, 'failed');
+  assert.equal(store2.data.get('a').lastError, 'unauthorized');
+  assert.equal(store2.data.get('a').uncertain, false);
+});
+
+test('antrean: exception tak terduga diperlakukan sebagai kegagalan jaringan', async () => {
+  const store = memoryStore([queued]);
+  const outcome = await deliverOne(store, 'a', async () => { throw new Error('boom'); }, 'P');
+  assert.equal(outcome, 'queued');
+  assert.equal(store.data.get('a').lastError, 'network');
+});
+
+/* ------------------------------ endpoint publik ------------------------------ */
 import { createFeedbackHandler } from '../src/lib/feedback-endpoint.ts';
 import { HttpError } from '../src/lib/http.ts';
 
-const input = { name: 'Ayu', message: 'Masukan ini bermanfaat.', rating: 5, project: 'PusakaEvents' };
-
-async function withMcpEnv(callback) {
-  const previousUrl = process.env.PORTFOLIO_MCP_URL;
-  const previousKey = process.env.PORTFOLIO_MCP_API_KEY;
-  process.env.PORTFOLIO_MCP_URL = 'https://portfolio.test/api/mcp';
-  process.env.PORTFOLIO_MCP_API_KEY = 'test-key-do-not-log';
-  try {
-    return await callback();
-  } finally {
-    if (previousUrl === undefined) delete process.env.PORTFOLIO_MCP_URL;
-    else process.env.PORTFOLIO_MCP_URL = previousUrl;
-    if (previousKey === undefined) delete process.env.PORTFOLIO_MCP_API_KEY;
-    else process.env.PORTFOLIO_MCP_API_KEY = previousKey;
-  }
+function formRequest(fields, { origin } = {}) {
+  const body = new FormData();
+  for (const [k, v] of Object.entries(fields)) body.set(k, v);
+  return new Request('https://app.example.com/api/feedback', { method: 'POST', body, headers: origin ? { origin } : {} });
 }
-
-function response(payload, status = 200) {
-  return new Response(typeof payload === 'string' ? payload : JSON.stringify(payload), {
-    status,
-    headers: { 'Content-Type': typeof payload === 'string' ? 'text/plain' : 'application/json' },
-  });
-}
-
-test('MCP helper sends the expected request and accepts pending only', async () => {
-  await withMcpEnv(async () => {
-    let request;
-    const result = await submitPortfolioFeedback(input, {
-      fetchImpl: async (url, init) => {
-        request = { url, init, body: JSON.parse(init.body) };
-        return response({ result: { structuredContent: { id: 'feedback-1', status: 'pending' } } });
-      },
-    });
-    assert.deepEqual(result, { status: 'ok' });
-    assert.equal(request.url, process.env.PORTFOLIO_MCP_URL);
-    assert.equal(request.init.headers.Authorization, 'Bearer test-key-do-not-log');
-    assert.equal(request.body.method, 'tools/call');
-    assert.equal(request.body.params.name, 'submit_feedback');
-    assert.deepEqual(request.body.params.arguments, input);
-    assert.equal(request.init.cache, 'no-store');
-    assert.equal(request.init.signal.aborted, false);
-  });
-});
-
-test('MCP helper maps 401 and 429 without reading their response bodies', async () => {
-  await withMcpEnv(async () => {
-    for (const [status, expected] of [[401, 'unauthorized'], [429, 'rate-limited']]) {
-      const result = await submitPortfolioFeedback(input, { fetchImpl: async () => response('private upstream body', status) });
-      assert.deepEqual(result, { status: expected });
-    }
-  });
-});
-
-test('MCP helper maps tool errors to invalid and malformed replies to unavailable', async () => {
-  await withMcpEnv(async () => {
-    const invalid = await submitPortfolioFeedback(input, { fetchImpl: async () => response({ result: { isError: true } }) });
-    assert.deepEqual(invalid, { status: 'invalid' });
-
-    for (const fetchImpl of [
-      async () => response('not json'),
-      async () => response({ result: {} }),
-      async () => response({ error: { message: 'ignored' } }),
-      async () => response({ result: { structuredContent: { id: 42, status: 'pending' } } }),
-      async () => response({ result: { structuredContent: { id: 'feedback-2', status: 'approved' } } }),
-      async () => response({ result: { structuredContent: { id: 'feedback-3', status: 'pending' } }, error: {} }, 500),
-    ]) {
-      assert.deepEqual(await submitPortfolioFeedback(input, { fetchImpl }), { status: 'unavailable' });
-    }
-  });
-});
-
-test('MCP helper maps abort timeout to unavailable', async () => {
-  await withMcpEnv(async () => {
-    let signal;
-    const result = await submitPortfolioFeedback(input, {
-      timeoutMs: 5,
-      fetchImpl: async (_url, init) => {
-        signal = init.signal;
-        return new Promise((_resolve, reject) => {
-          signal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true });
-        });
-      },
-    });
-    assert.deepEqual(result, { status: 'unavailable' });
-    assert.equal(signal.aborted, true);
-  });
-});
-
-test('unconfigured helper does not fetch and no helper logs include the key', async () => {
-  const previousUrl = process.env.PORTFOLIO_MCP_URL;
-  const previousKey = process.env.PORTFOLIO_MCP_API_KEY;
-  const original = Object.fromEntries(['log', 'info', 'warn', 'error'].map((method) => [method, console[method]]));
-  const output = [];
-  process.env.PORTFOLIO_MCP_URL = '';
-  process.env.PORTFOLIO_MCP_API_KEY = 'test-key-do-not-log';
-  for (const method of Object.keys(original)) console[method] = (...args) => output.push(args.join(' '));
-  try {
-    const result = await submitPortfolioFeedback(input, { fetchImpl: async () => { throw new Error('fetch should not run'); } });
-    assert.deepEqual(result, { status: 'not-configured' });
-    assert.equal(output.some((line) => line.includes('test-key-do-not-log')), false);
-  } finally {
-    for (const [method, fn] of Object.entries(original)) console[method] = fn;
-    if (previousUrl === undefined) delete process.env.PORTFOLIO_MCP_URL;
-    else process.env.PORTFOLIO_MCP_URL = previousUrl;
-    if (previousKey === undefined) delete process.env.PORTFOLIO_MCP_API_KEY;
-    else process.env.PORTFOLIO_MCP_API_KEY = previousKey;
-  }
-});
-
-test('feedback endpoint logs only result category, never submission values or API key', async () => {
-  const previousKey = process.env.PORTFOLIO_MCP_API_KEY;
-  process.env.PORTFOLIO_MCP_API_KEY = 'test-key-do-not-log';
-  const originalInfo = console.info;
-  const output = [];
-  console.info = (...args) => output.push(args.join(' '));
-  try {
-    const handler = createFeedbackHandler({ submit: async () => ({ status: 'ok' }) });
-    await handler(makeRequest({ ...validBody, name: 'Private Name', message: 'Private message body.' }));
-    assert.deepEqual(output, ['[feedback] result ok']);
-    assert.equal(output.join(' ').includes('test-key-do-not-log'), false);
-    assert.equal(output.join(' ').includes('Private Name'), false);
-    assert.equal(output.join(' ').includes('Private message body'), false);
-  } finally {
-    console.info = originalInfo;
-    if (previousKey === undefined) delete process.env.PORTFOLIO_MCP_API_KEY;
-    else process.env.PORTFOLIO_MCP_API_KEY = previousKey;
-  }
-});
-
-function makeRequest(body, headers = {}) {
-  return new Request('https://pusaka.test/api/feedback', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', ...headers },
-    body: JSON.stringify(body),
-  });
-}
-
-const validBody = {
-  name: '  Nur   Azizah  ',
-  role: 'Bendahara',
-  company: '',
-  rating: 5,
-  message: 'Aplikasi ini sangat membantu.',
-  consent: true,
-  website: '',
-};
-
-test('feedback endpoint validates fields and requires exact consent', async () => {
-  let calls = 0;
-  const handler = createFeedbackHandler({ submit: async () => { calls++; return { status: 'ok' }; } });
-  const invalid = await handler(makeRequest({ ...validBody, name: '   ' }));
-  assert.equal(invalid.status, 400);
-  const noConsent = await handler(makeRequest({ ...validBody, consent: false }));
-  assert.equal(noConsent.status, 400);
-  assert.equal(calls, 0);
-});
-
-test('feedback endpoint normalizes fields and adds only server project data', async () => {
-  let sent;
-  const handler = createFeedbackHandler({ submit: async (value) => { sent = value; return { status: 'ok' }; }, logCategory: () => {} });
-  const result = await handler(makeRequest(validBody));
-  assert.equal(result.status, 200);
-  assert.deepEqual(sent, {
-    name: 'Nur Azizah',
-    role: 'Bendahara',
-    rating: 5,
-    message: 'Aplikasi ini sangat membantu.',
-    project: 'PusakaEvents',
-  });
-  assert.equal('consent' in sent, false);
-  assert.equal('website' in sent, false);
-});
-
-test('feedback endpoint silently accepts the honeypot without an MCP call', async () => {
-  let calls = 0;
-  const handler = createFeedbackHandler({ submit: async () => { calls++; return { status: 'ok' }; }, logCategory: () => {} });
-  const result = await handler(makeRequest({ website: 'filled by bot' }));
-  assert.equal(result.status, 200);
-  assert.equal(calls, 0);
-});
-
-test('feedback endpoint limits by hashed IP and returns Retry-After', async () => {
-  let keySeen;
-  let calls = 0;
+const goodForm = { name: 'Budi', role: 'Anggota', message: 'Aplikasinya sangat membantu kami.', rating: '5', consent: 'true', website: '' };
+function makeHandler(overrides = {}) {
+  const calls = { saved: [], scheduled: [] };
   const handler = createFeedbackHandler({
-    submit: async () => { calls++; return { status: 'ok' }; },
-    ipForRequest: () => '203.0.113.77',
-    limit: (key) => {
-      keySeen = key;
-      throw new HttpError(429, 'limited', 'RATE_LIMITED', 91);
-    },
+    save: async (fields, avatar) => { calls.saved.push({ fields, avatar }); return 'id-1'; },
+    schedule: (id) => calls.scheduled.push(id),
+    ipForRequest: () => '1.2.3.4',
     logCategory: () => {},
+    ...overrides,
   });
-  const result = await handler(makeRequest(validBody));
-  assert.equal(result.status, 429);
-  assert.equal(result.headers.get('retry-after'), '91');
-  assert.match(keySeen, /^feedback:[a-f\d]{64}$/);
-  assert.equal(keySeen.includes('203.0.113.77'), false);
-  assert.equal(calls, 0);
+  return { handler, calls };
+}
+
+test('endpoint: menyimpan dulu lalu menjadwalkan pengiriman', async () => {
+  const { handler, calls } = makeHandler();
+  const res = await handler(formRequest(goodForm));
+  assert.equal(res.status, 200);
+  assert.deepEqual(await res.json(), { ok: true });
+  assert.equal(calls.saved.length, 1);
+  assert.equal(calls.saved[0].fields.name, 'Budi');
+  assert.deepEqual(calls.scheduled, ['id-1']);
 });
 
-test('feedback endpoint maps upstream results to safe public responses', async () => {
-  for (const [upstream, expectedStatus, retryAfter] of [
-    [{ status: 'ok' }, 200, null],
-    [{ status: 'invalid' }, 400, null],
-    [{ status: 'rate-limited' }, 429, '60'],
-    [{ status: 'unauthorized' }, 503, null],
-    [{ status: 'unavailable' }, 503, null],
-    [{ status: 'not-configured' }, 503, null],
-  ]) {
-    const handler = createFeedbackHandler({ submit: async () => upstream, limit: () => {}, logCategory: () => {} });
-    const result = await handler(makeRequest(validBody));
-    assert.equal(result.status, expectedStatus);
-    assert.equal(result.headers.get('retry-after'), retryAfter);
-    if (expectedStatus === 503) {
-      assert.deepEqual(await result.json(), { error: 'Masukan belum dapat dikirim saat ini. Coba lagi beberapa saat lagi.' });
-    }
-  }
+test('endpoint: honeypot terisi tidak menyimpan apa pun', async () => {
+  const { handler, calls } = makeHandler();
+  const res = await handler(formRequest({ ...goodForm, website: 'http://spam' }));
+  assert.equal(res.status, 200);
+  assert.equal(calls.saved.length, 0);
+  assert.equal(calls.scheduled.length, 0);
 });
 
-test('feedback endpoint rejects non-JSON and overlarge request bodies', async () => {
-  const handler = createFeedbackHandler({ submit: async () => ({ status: 'ok' }) });
-  const nonJson = await handler(new Request('https://pusaka.test/api/feedback', { method: 'POST', headers: { 'content-type': 'text/plain' }, body: 'hello' }));
-  assert.equal(nonJson.status, 415);
-  const large = await handler(new Request('https://pusaka.test/api/feedback', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ payload: 'x'.repeat(8192) }),
-  }));
-  assert.equal(large.status, 413);
+test('endpoint: validasi, tipe konten, dan origin', async () => {
+  const { handler, calls } = makeHandler();
+  assert.equal((await handler(formRequest({ ...goodForm, message: 'pendek' }))).status, 422);
+  assert.equal((await handler(formRequest({ ...goodForm, consent: '' }))).status, 422);
+  const json = await handler(new Request('https://app.example.com/api/feedback', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' }));
+  assert.equal(json.status, 415);
+  const cross = await handler(new Request('https://app.example.com/api/feedback', { method: 'POST', headers: { origin: 'https://evil.example', host: 'app.example.com' }, body: new FormData() }));
+  assert.equal(cross.status, 403);
+  assert.equal(calls.saved.length, 0);
+});
+
+test('endpoint: batas laju per IP menghasilkan 429 dengan Retry-After', async () => {
+  const { handler } = makeHandler({ limit: (() => { let n = 0; return () => { if (++n > 1) throw new HttpError(429, 'x', 'RATE_LIMITED', 30); }; })() });
+  assert.equal((await handler(formRequest(goodForm))).status, 200);
+  const res = await handler(formRequest(goodForm));
+  assert.equal(res.status, 429);
+  assert.equal(res.headers.get('retry-after'), '30');
+});
+
+test('endpoint: kegagalan penyimpanan menjadi 503 tanpa membocorkan detail', async () => {
+  const { handler, calls } = makeHandler({ save: async () => { throw new Error('postgres://user:pw@host/db'); } });
+  const res = await handler(formRequest(goodForm));
+  assert.equal(res.status, 503);
+  assert.equal((await res.text()).includes('postgres'), false);
+  assert.equal(calls.scheduled.length, 0);
 });
