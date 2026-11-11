@@ -1,49 +1,53 @@
-# Feedback portfolio
+# Feedback publik dan koneksi MCP portfolio
 
 ## Alur
 
-Form publik tersedia di `/masukan` dan tautannya ada pada bagian **Umum** di sidebar/drawer. Route `POST /api/feedback` memvalidasi ukuran dan isi request, lalu memanggil helper server-only yang meneruskan hanya nama, peran, instansi, rating, isi masukan, dan konstanta project `PusakaEvents` ke tool `submit_feedback` pada MCP portfolio. Persetujuan dan honeypot tidak diteruskan. Tidak ada masukan yang disimpan ke database PusakaEvent.
+1. Pengunjung membuka modal **Beri Feedback**: otomatis sekitar 3 detik setelah beranda dimuat (bisa dilewati; muncul lagi setiap halaman dimuat ulang) atau lewat menu samping. Halaman penuh `/masukan` tetap tersedia. Admin yang sedang masuk tidak diganggu modal otomatis.
+2. `POST /api/feedback` (multipart) memvalidasi isian, lalu **menyimpan ke database lebih dulu** (tabel `Feedback`, status `QUEUED`). Setelah respons dikirim (`after()`), server mencoba mengirim ke portfolio. Pengunjung tidak kehilangan masukan walau portfolio sedang bermasalah.
+3. Pengiriman ulang otomatis: dari cron harian (`vercel.json`, `/api/cron/feedback`), saat admin membuka halaman Feedback, dan setelah tiap kiriman baru. Admin juga bisa menekan **Kirim ulang** per baris.
 
-Testimoni baru berstatus `pending` di portfolio. Masukan baru ditampilkan setelah Alfiz menyetujuinya. Tidak ada roster, nomor telepon peserta, status kas, atau foto struk yang dibaca maupun dikirim oleh alur ini.
+Alamat tool: `submit_feedback` (nama, isi, rating, peran, project `PusakaEvents`). Persetujuan, honeypot, dan foto tidak diteruskan.
 
-Halaman `/masukan` adalah halaman publik terpisah dari beranda agar alur pembayaran tetap fokus dan form panjang tidak mengganggu ringkasan kas. Service worker mengambil navigasi halaman dari jaringan (offline hanya memakai halaman `/offline`) dan tidak menyimpan `/masukan`; request `/api/feedback` dikecualikan dari cache API.
+## Pengaturan koneksi (admin)
 
-## Environment
+Pengaturan > **Koneksi portfolio (MCP)**: URL MCP, API key, sakelar Tersambung/Terputus, tombol **Tes koneksi**, dan status terakhir (waktu, hasil, durasi, keterangan). Tidak ada environment variable untuk MCP.
 
-Atur dua variabel server-only berikut di Vercel Production/Preview sesuai kebutuhan dan di `.env.local` untuk development. Jangan gunakan awalan `NEXT_PUBLIC_`.
+- URL harus `https`, tanpa kredensial, berupa nama domain (bukan IP/localhost) agar form admin tidak bisa dipakai memanggil alamat internal. Redirect tidak diikuti.
+- API key dienkripsi AES-256-GCM dengan kunci turunan (HKDF-SHA256) dari `SESSION_SECRET`, disimpan di tabel `PortfolioConnection`, hanya ditampilkan tersamar (empat karakter terakhir), tidak pernah dikirim balik ke browser dan tidak dicatat di log. Jika `SESSION_SECRET` diganti, key tersimpan tidak terbaca dan harus diisi ulang.
+- **Terputus**: feedback baru tetap tersimpan dan menunggu di antrean; tidak ada pengiriman. Sambungkan lagi untuk melanjutkan.
+- **Tes koneksi** memakai `tools/list` (baca saja), jadi tidak membuat testimoni di portfolio. Hasilnya juga menyebut field yang belum didukung tool (mis. foto).
 
-| Variabel | Nilai |
-| --- | --- |
-| `PORTFOLIO_MCP_URL` | `https://alfizilham.vercel.app/api/mcp` |
-| `PORTFOLIO_MCP_API_KEY` | API key MCP portfolio yang masih aktif |
+## Antrean dan penanganan error
 
-Jika salah satu variabel kosong, route mengembalikan pesan layanan sementara tidak tersedia dan tidak menghubungi MCP.
+Kolom `Feedback`: `id`, `syncStatus` (`QUEUED`/`SENT`/`FAILED`), `attempts`, `lastError`, `nextAttemptAt`, `uncertain`, `remoteId`.
 
-## Validasi dan respons
-
-Nama dipangkas dan spasi berulang dirapikan (1–80 karakter); peran dan instansi opsional (maks. 80 karakter); rating bilangan bulat 1–5; isi masukan 5–1500 karakter; persetujuan harus bernilai `true`. Request non-JSON dan body di atas 8 KB ditolak. Pembatas laju adalah 3 kiriman per IP yang di-hash dalam 10 menit.
-
-| Hasil | Respons route | Pesan ke pengguna |
+| Penyebab | Arti | Diulang? |
 | --- | --- | --- |
-| Terkirim dan berstatus `pending` | 200 | Konfirmasi terkirim; akan ditinjau sebelum tampil. |
-| Isian ditolak oleh validasi atau MCP | 400 | Periksa kembali isian masukan. |
-| Batas laju lokal atau MCP tercapai | 429 + `Retry-After` | Coba lagi setelah jeda. |
-| Key tidak sah, layanan gagal, timeout, atau belum dikonfigurasi | 503 | Masukan belum dapat dikirim saat ini. Coba lagi beberapa saat lagi. |
-| Honeypot terisi | 200 tanpa panggilan MCP | Respons semu agar bot tidak mendapat sinyal keberhasilan yang berbeda. |
+| `dns` | nama server tidak ditemukan | ya |
+| `network` | koneksi gagal | ya |
+| `timeout` | tidak ada jawaban dalam 10 detik | ya |
+| `rate_limited` (429) | batas 60 permintaan/menit; `Retry-After` dihormati | ya |
+| `server` (5xx/respons rusak) | server portfolio bermasalah | ya |
+| `unauthorized` (401/403) | API key ditolak | tidak |
+| `invalid` (4xx lain, `isError`) | data ditolak | tidak |
 
-Log aplikasi hanya mencatat kategori hasil (contoh `unavailable`), bukan key, respons MCP, nama, atau isi masukan.
+Jeda eksponensial dengan jitter: 30 dtk, 2 mnt, 8 mnt, 32 mnt, 2 jam (maksimal 5 percobaan, lalu `FAILED`). Satu baris hanya dikirim oleh satu pemroses (klaim atomik dengan lease 60 detik), dan baris `SENT` tidak pernah dikirim lagi. Penyebab spesifik ditampilkan di daftar Feedback admin.
 
-## Privasi dan risiko kirim ganda
+## Batasan sisi portfolio
 
-Data hanya diteruskan setelah kotak persetujuan dicentang. Pengiriman memakai koneksi server-ke-server; API key tidak dikirim ke browser. Masukan dapat memuat nama, peran, instansi, rating, dan isi yang disetujui untuk ditampilkan di portfolio. Jangan masukkan data peserta, nomor telepon, data pembayaran, atau struk.
+- Tool `submit_feedback` **tidak punya field foto**, jadi foto profil hanya disimpan lokal (prefix `feedback/` di Object Storage) dan tampil di daftar admin; di UI tanpa foto dipakai avatar inisial.
+- Tool **tidak punya idempotency key**. Timeout atau 5xx bisa terjadi setelah portfolio menerima testimoni, sehingga retry dapat membuat duplikat. Baris seperti itu ditandai "pengiriman tidak pasti"; periksa dashboard portfolio sebelum mengirim ulang manual.
 
-MCP tidak menyediakan idempotency key. Timeout dapat terjadi setelah portfolio menerima testimoni, sehingga retry manual mungkin membuat entri pending ganda. Aplikasi tidak melakukan retry otomatis, dan tombol kirim dinonaktifkan selama request berlangsung. Jika hasil tidak jelas, periksa dashboard portfolio sebelum mengirim ulang.
+## Anti-spam dan privasi
 
-Limiter memakai memori instance serverless sehingga hitungan dapat berbeda antar-instance; ini lapisan pembatas ringan, bukan jaminan global. Untuk perlindungan global, gunakan limiter bersama atau firewall platform.
+Honeypot, batas 3 kiriman per IP (di-hash) per 10 menit (di memori instance, jadi hanya pembatas ringan), checkbox persetujuan wajib, foto maksimal 2 MB (JPG/PNG/WebP, magic byte dicek lalu diubah ke WebP 256 px tanpa metadata). Log hanya mencatat kategori hasil, bukan key, isi, atau nama.
+
+## Cron
+
+Tambahkan `CRON_SECRET` (acak panjang) di environment Vercel agar Vercel Cron mengirim `Authorization: Bearer ...`. Tanpa itu, endpoint hanya bisa dipanggil admin yang sedang masuk. Jadwal harian dipilih agar cocok dengan paket Hobby.
 
 ## Rotasi key
 
 1. Buat key baru di pengelolaan MCP portfolio.
-2. Perbarui `PORTFOLIO_MCP_API_KEY` pada environment Vercel yang digunakan dan redeploy.
-3. Setelah deploy terverifikasi, cabut key lama di server portfolio.
-4. Untuk lokal, ganti nilai di `.env.local` secara manual. Jangan commit atau kirim key melalui chat/log.
+2. Pengaturan > Koneksi portfolio: tempel key baru, Simpan, lalu Tes koneksi.
+3. Cabut key lama di server portfolio.
