@@ -73,11 +73,12 @@ Ambil `s3_endpoint` dan `region` dari balasannya. Isi ke env:
 
 | Env | Isi |
 | --- | --- |
-| `ADMIN_PASSWORD` | password admin awal (ganti lewat Pengaturan setelah masuk) |
+| `ADMIN_PASSWORD` | password admin awal (ganti lewat Super Admin > Security setelah masuk) |
+| `SUPER_ADMIN_PASSWORD` | password menu Super Admin (MCP Server, Security, Tutup Periode); terpisah dari password admin |
 | `SESSION_SECRET` | acak panjang: `openssl rand -base64 32` |
 | `CRON_SECRET` | (opsional) acak panjang untuk Vercel Cron feedback |
 
-URL dan API key MCP portfolio diatur admin lewat halaman Pengaturan (disimpan terenkripsi di database), bukan lewat env. Lihat [docs/feedback.md](docs/feedback.md) untuk alur, antrean, privasi, serta rotasi key.
+URL dan API key MCP portfolio diatur super admin lewat menu Super Admin > MCP Server (disimpan terenkripsi di database), bukan lewat env. Lihat [docs/feedback.md](docs/feedback.md) untuk alur, antrean, privasi, serta rotasi key.
 
 Salin `.env.example` ke `.env.local` untuk dev lokal.
 
@@ -101,7 +102,7 @@ npm run dev
 1. Import repo di Vercel. Framework: Next.js. Build/Install command biarkan default (`npm run build` menjalankan `prisma generate`, `prisma migrate deploy`, lalu `next build`).
 2. Isi **semua env** di atas (Production, Preview, Development).
 3. Deploy. Vercel menerapkan migrasi yang belum berjalan sebelum membangun aplikasi.
-4. Buka situs, masuk admin lewat menu **Masuk admin**, dan ubah password di Pengaturan.
+4. Buka situs, masuk admin lewat menu **Masuk admin**, dan ubah password di Super Admin > Security.
 5. Cek halaman Pengaturan: nominal, target, bank, rekening, atas nama (nilai awal: BSI 7366090325 a.n. Raisya Zumara).
 
 ## Sesi admin
