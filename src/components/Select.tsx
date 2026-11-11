@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
+import { createPortal } from 'react-dom';
 import { Ic } from './Ic';
 
 export type Opt = { value: string; label: string };
@@ -59,7 +60,7 @@ export function Select({
       left,
       width,
       maxHeight,
-      zIndex: 80,
+      zIndex: 200,
       ...(placeAbove
         ? { top: 'auto', bottom: viewportHeight - anchor.top + 6 }
         : { top: anchor.bottom + 6, bottom: 'auto' }),
@@ -69,7 +70,8 @@ export function Select({
   useEffect(() => {
     if (!open) return;
     const onDown = (e: PointerEvent) => {
-      if (!root.current?.contains(e.target as Node)) setOpen(false);
+      const t = e.target as Node;
+      if (!root.current?.contains(t) && !list.current?.contains(t)) setOpen(false);
     };
     document.addEventListener('pointerdown', onDown);
     window.addEventListener('resize', positionMenu);
@@ -139,7 +141,7 @@ export function Select({
         </span>
         <Ic n="i-down" />
       </button>
-      {open && (
+      {open && createPortal(
         <div
           id={`${uid}-lb`}
           ref={list}
@@ -185,7 +187,8 @@ export function Select({
               {o.value === value && <Ic n="i-check" />}
             </button>
           ))}
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );
